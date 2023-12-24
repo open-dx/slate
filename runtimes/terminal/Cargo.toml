@@ -1,0 +1,37 @@
+[package]
+name = "terminal-slate"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = []
+debug = []
+verbose = []
+inspect = []
+raw = []
+
+[[example]]
+name = "terminal-slate-basic"
+path = "examples/basic.rs"
+
+#--
+[dependencies]
+smallvec = { version = "1.11.2" }
+tracing = { version = "0.1.40", features = ["log"] }
+
+# [dependencies.bumpalo]
+# version = "3.14.0"
+# features = ["allocator_api"]
+
+[dependencies.crossterm]
+version = "0.27.0"
+
+[dependencies.slate]
+path = "../../"
+
+#--
+[dev-dependencies]
+anyhow = { version = "1.0.75", features = ["backtrace"] }
+
+[dev-dependencies.chizel]
+path = "../../macros/chizel"

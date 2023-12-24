@@ -1,0 +1,245 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'bevy-slate'",
+            "env": {
+                "PATH": "${env:RUSTUP_HOME}/toolchains/nightly-x86_64-pc-windows-msvc/bin;${workspaceFolder}/.target/debug/deps;${env:PATH}",
+            },
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=bevy-slate",
+                    "--features=dev"
+                ],
+                "filter": {
+                    "name": "bevy-slate",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'bevy-slate-basic'",
+            "env": {
+                "PATH": "${env:RUSTUP_HOME}/toolchains/nightly-x86_64-pc-windows-msvc/bin;${workspaceFolder}/.target/debug/deps;${env:PATH}",
+            },
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=bevy-slate-basic",
+                    "--package=bevy-slate",
+                    "--features=dev,debug,verbose"
+                ],
+                "filter": {
+                    "name": "bevy-slate-basic",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'bevy-slate-basic'",
+            "env": {
+                "PATH": "${env:RUSTUP_HOME}/toolchains/nightly-x86_64-pc-windows-msvc/bin;${workspaceFolder}/.target/debug/deps;${env:PATH}",
+            },
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=bevy-slate-basic",
+                    "--package=bevy-slate",
+                    "--features=dev"
+                ],
+                "filter": {
+                    "name": "bevy-slate-basic",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'slate'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=slate"
+                ],
+                "filter": {
+                    "name": "slate",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug benchmark 'main'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bench=main",
+                    "--package=slate"
+                ],
+                "filter": {
+                    "name": "main",
+                    "kind": "bench"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'terminal-slate'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=terminal-slate"
+                ],
+                "filter": {
+                    "name": "terminal-slate",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'terminal-slate-basic'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=terminal-slate-basic",
+                    "--package=terminal-slate"
+                ],
+                "filter": {
+                    "name": "terminal-slate-basic",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'terminal-slate-basic'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=terminal-slate-basic",
+                    "--package=terminal-slate"
+                ],
+                "filter": {
+                    "name": "terminal-slate-basic",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'web-slate'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=web-slate"
+                ],
+                "filter": {
+                    "name": "web-slate",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug example 'web-slate-basic'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example=web-slate-basic",
+                    "--package=web-slate"
+                ],
+                "filter": {
+                    "name": "web-slate-basic",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in example 'web-slate-basic'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--example=web-slate-basic",
+                    "--package=web-slate"
+                ],
+                "filter": {
+                    "name": "web-slate-basic",
+                    "kind": "example"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'web'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=web",
+                    "--package=web-slate"
+                ],
+                "filter": {
+                    "name": "web",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

@@ -1,0 +1,23 @@
+[package]
+name = "chizel"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[features]
+debug = []
+verbose = []
+inspect = []
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full"] }
+
+[dependencies.enum-iterator]
+version = "1.4.1"
+
+[dependencies.smallvec]
+version = "1.11"

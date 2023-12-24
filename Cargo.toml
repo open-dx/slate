@@ -1,0 +1,85 @@
+[package]
+name = "slate"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["layout"]
+dev = []
+debug = []
+verbose = []
+inspect = []
+profiling = ["tracy-client"]
+layout = []
+micro = []
+
+[[example]]
+name = "slate-bones"
+path = "examples/bones.rs"
+
+[[example]]
+name = "slate-styles"
+path = "examples/styles.rs"
+
+[[bench]]
+name = "scaffold"
+harness = false
+
+#--
+[dependencies]
+uuid = { version = "1.6.1", default-features = false, features = ["v4", "v5"] }
+smallvec = "1.11.2"
+
+# Enables debugging options for the slate runtime.
+tracing = { version = "0.1.40", default-features = false, features = ["log"] }
+tracing-subscriber = { version = "0.3.18", default-features = false, features = ["alloc", "ansi", "fmt", "registry", "sharded-slab", "smallvec", "thread_local", "tracing-log", "env-filter"] }
+tracy-client = { version = "0.16.4", optional = true }
+
+# Provides improved access-time for the surface element graph
+slotmap = { version = "1.0.6", default-features = false }
+
+# Offers improvided allocation performance to elements,
+# stylesheets, and other structures during scaffolding.
+bumpalo = { version = "3.14.0", features = ["allocator_api"] }
+bumpalo-herd = "0.1.2"
+
+# Provides `allocator_api2` HashMap implementation so we can
+# do things like building the scaffold with Bumpalo.
+hashbrown = { version = "0.14.2", features = ["nightly"] }
+ahash = { version = "0.8.6", default-features = false }
+
+# Used by the stylesheet implementation for
+# faster(?) dynamic dispatch of style properties.
+enum_dispatch = "0.3.12"
+
+#--
+[dependencies.chizel]
+path = "./macros/chizel"
+
+[dependencies.chalk]
+path = "./macros/chalk"
+
+#--
+[dev-dependencies]
+anyhow = { version = "1.0" }
+criterion = { version = "0.5.1" }
+
+#--
+[workspace]
+resolver = "2"
+members = [
+  "macros/chizel",
+  "runtimes/bevy",
+  "runtimes/terminal",
+  "runtimes/web",
+  "runtimes/godot", "macros/chalk", "apps/hud",
+]
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+opt-level = "s"

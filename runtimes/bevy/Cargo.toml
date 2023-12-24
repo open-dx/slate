@@ -1,0 +1,36 @@
+[package]
+name = "bevy-slate"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = []
+dev = ["bevy/dynamic_linking", "slate/dev"]
+debug = ["slate/debug"]
+verbose = ["slate/verbose"]
+inspect = ["slate/inspect"]
+profiling = ["tracy-client", "slate/profiling"]
+
+#---
+[[example]]
+name = "bevy-slate-basic"
+path = "examples/basic.rs"
+
+#---
+[dependencies]
+bevy = { version = "0.12" }
+smallvec = "1.11.2"
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["tracing", "env-filter"] }
+tracy-client = { version = "0.16.4", features = ["enable"], optional = true }
+
+[dependencies.slate]
+path = "../../"
+
+#--
+[dev-dependencies]
+anyhow = "1.0.75"
+log = "0.4.20"
+
+[dev-dependencies.chizel]
+path = "../../macros/chizel"
