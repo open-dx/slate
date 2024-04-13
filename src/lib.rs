@@ -1,3 +1,4 @@
+//! Where does this show up?
 #![no_std]
 #![feature(error_in_core)]
 #![feature(allocator_api)]

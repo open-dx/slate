@@ -18,11 +18,11 @@ path = "examples/basic.rs"
 
 #---
 [dependencies]
-bevy = { version = "0.12" }
-smallvec = "1.11.2"
-tracing = "0.1.40"
+bevy = { version = "0.13" }
+smallvec = "1.11"
+tracing = "0.1"
 tracing-subscriber = { version = "0.3.18", features = ["tracing", "env-filter"] }
-tracy-client = { version = "0.16.4", features = ["enable"], optional = true }
+tracy-client = { version = "0.17", features = ["enable"], optional = true }
 
 [dependencies.slate]
 path = "../../"

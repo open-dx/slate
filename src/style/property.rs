@@ -105,9 +105,11 @@ impl StyleValue for FlexBasis {
 
 //--
 /// TODO
+// #[derive(StyleValue, Debug, PartialEq)]
 #[derive(Debug, PartialEq)]
 pub struct FlexGrow(f32);
 
+#[automatically_derived]
 impl FlexGrow {
     /// TODO
     pub fn new(value: f32) -> Self {
@@ -115,6 +117,7 @@ impl FlexGrow {
     }
 }
     
+#[automatically_derived]
 impl Deref for FlexGrow {
     type Target = f32;
     
@@ -141,6 +144,7 @@ impl StyleValue for FlexGrow {
 #[derive(Debug, PartialEq)]
 pub struct FlexShrink(f32);
 
+#[automatically_derived]
 impl FlexShrink {
     /// TODO
     pub fn new(value: f32) -> Self {

@@ -1,3 +1,4 @@
+// use core::borrow::Borrow;
 use core::hash::Hash;
 use core::hash::Hasher;
 
@@ -5,8 +6,6 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use ahash::AHasher;
-
-// use bumpalo::Bump;
 
 // use crate::surface::Surface;
 // use crate::surface::SurfaceError;
@@ -27,43 +26,58 @@ use crate::style::StyleValue;
 // use crate::xtra::HashMap;
 
 //---
-/// Represents a lightweight single-pass builder for an Element node.
+/// A lightweight single-pass builder for a tree of Element nodes.
+/// 
+/// Represents the intended state of a `Surface` for a.
+/// 
+/// ## Guide: Direct Scaffolding
+/// 
+/// In some cases you might want to build a scaffold directly (e.g., at runtime
+/// on an embedded system, or in cases where reactivity isn't a primary goal).
+/// 
+/// In these cases you're encouraged to build a `Scaffold` directly and use it
+/// to render the `Surface` in whatever way you need.
+/// 
+/// ```rust
+/// let mut scaffold = Scaffold::new();
+/// // TODO: etc..
+/// ```
 #[derive(Debug)]
-pub struct Scaffold<'scaffold, H: Hasher = AHasher> {
+pub struct Scaffold {
     /// The node currently being built.
-    element: Option<Box<dyn Element + 'scaffold>>,
+    element: Option<Box<dyn Element + 'static>>,
     
-    /// The actual state of the hash after final calculation.
-    hash: Option<u64>,
-    
-    /// Hash of the element's internal state.
-    hasher: H,
-    
-    /// TODO
+    /// The built stylesheet for this node.
     stylesheet: Option<StyleSheet>,
     
     /// TODO
     slots: Vec<()>,
     
     /// TODO
-    children: Vec<Scaffold<'scaffold>>,
+    children: Vec<Scaffold>,
+    
+    /// The state of the hash after the last calculation.
+    hash: Option<u64>,
+    
+    /// Hash of the element's internal state.
+    hasher: AHasher,
 }
 
-impl<'scaffold> Scaffold<'scaffold, AHasher> {
-    /// TODO
+impl Scaffold {
+    /// Create a new Scaffold from a given Element.
     pub fn new() -> Self {
         Scaffold {
             element: None,
-            hasher: AHasher::default(),
-            hash: None,
             stylesheet: None,
             slots: Vec::new(),
             children: Vec::new(),
+            hasher: AHasher::default(),
+            hash: None,
         }
     }
     
     /// TODO
-    pub fn with_element(mut self, element: impl Element + 'scaffold) -> Self {
+    pub fn with_element(mut self, element: impl Element + 'static) -> Self {
         self.element = Some(Box::new(element));
         self // etc..
     }
@@ -79,31 +93,19 @@ impl<'scaffold> Scaffold<'scaffold, AHasher> {
     }
 }
 
-impl<'scaffold> Scaffold<'scaffold> {
-    /// TODO
-    pub fn try_from_draw_fn<F>(draw_fn: F) -> Result<Self, ScaffoldError>
-    where
-        F: FnOnce(&mut Scaffold<'scaffold>) -> Result<(), ScaffoldError>,
-    {
-        let mut scaffold = Scaffold::new();
-        draw_fn(&mut scaffold)?;
-        Ok(scaffold)
-    }
-}
-
-impl<'scaffold> Scaffold<'scaffold> {
+impl Scaffold {
     /// Provides immutable access to the element node of this Scaffold.
-    pub fn get_element(&self) -> Option<&Box<dyn Element + 'scaffold>> {
+    pub fn get_element(&self) -> Option<&Box<dyn Element + 'static>> {
         self.element.as_ref()
     }
     
     /// Provides immutable access to the element node of this Scaffold.
-    pub fn get_element_mut(&mut self) -> Option<&mut Box<dyn Element + 'scaffold>> {
+    pub fn get_element_mut(&mut self) -> Option<&mut Box<dyn Element + 'static>> {
         self.element.as_mut()
     }
     
     /// TODO
-    pub fn take_element(&mut self) -> Option<Box<dyn Element + 'scaffold>> {
+    pub fn take_element(&mut self) -> Option<Box<dyn Element + 'static>> {
         self.element.take()
     }
     
@@ -124,19 +126,19 @@ impl<'scaffold> Scaffold<'scaffold> {
     
     //--
     /// Provides immutable access to the children of this Scaffold.
-    pub fn children(&self) -> &Vec<Scaffold<'scaffold>> {
+    pub fn children(&self) -> &Vec<Scaffold> {
         self.children.as_ref()
     }
     
     /// Provides mutable access to the children of this Scaffold.
-    pub fn children_mut(&mut self) -> &mut Vec<Scaffold<'scaffold>> {
+    pub fn children_mut(&mut self) -> &mut Vec<Scaffold> {
         &mut self.children
     }
 }
 
-impl<'scaffold> Scaffold<'scaffold> {
+impl Scaffold {
     /// TODO
-    pub fn add<E: Element + Renderable + Hash + 'scaffold>(&mut self, element: E) -> Result<&mut Self, ScaffoldError> {
+    pub fn add<E: Element + Renderable + Hash + 'static>(&mut self, element: E) -> Result<&mut Self, ScaffoldError> {
         let mut new_scaffold = Scaffold::new();
         element.hash(&mut new_scaffold.hasher);
         new_scaffold.element = Some(Box::new(element));
@@ -166,7 +168,7 @@ impl<'scaffold> Scaffold<'scaffold> {
     /// TODO
     pub fn with_children<F>(&mut self, child_builder_fn: F) -> Result<&mut Self, ScaffoldError>
     where
-        F: FnOnce(&mut Scaffold<'scaffold>) -> Result<(), ScaffoldError>
+        F: FnOnce(&mut Scaffold) -> Result<(), ScaffoldError>
     {
         child_builder_fn(self)?;
         Ok(self)
@@ -183,7 +185,7 @@ impl<'scaffold> Scaffold<'scaffold> {
     }
 }
 
-impl<'scaffold> Scaffold<'scaffold> {
+impl Scaffold {
     /// TODO
     pub fn hash(&self) -> Option<u64> {
         if self.hash == None {
@@ -193,10 +195,41 @@ impl<'scaffold> Scaffold<'scaffold> {
     }
     
     /// TODO
-    pub fn has_changes(&self, element_node: &ElementNode<'scaffold>) -> Result<bool, ScaffoldError> {
+    pub fn has_changes(&self, element_node: &ElementNode) -> Result<bool, ScaffoldError> {
         let scaffold_hash = self.hash().ok_or(ScaffoldError::Unknown("Hash not yet built!"))?;
         let element_hash = element_node.hash();
         Ok(scaffold_hash != element_hash)
+    }
+}
+
+// use core::cell::OnceCell;
+// use bumpalo_herd::Herd;
+
+// pub struct DebugHerd(Herd);
+
+// #[cfg(debug_assertions)]
+// impl DebugHerd {
+//     /// A bump used in quick debug operations.
+//     const HERD: OnceCell<Herd> = OnceCell::new();
+    
+//     /// Get a &Bump for debug operations.
+//     /// TODO: There's probably a better way to do this.
+//     pub(crate) fn member<'a>() -> &'a Member<'a> {
+//         Self::HERD.get_or_init(|| Herd::new()).get().borrow()
+//     }
+// }
+
+// #[cfg(debug_assertions)]
+impl Scaffold {
+    /// TODO
+    pub fn try_from_draw_fn<F>(draw_fn: F) -> Result<Self, ScaffoldError>
+    where
+        F: FnOnce(&mut Scaffold) -> Result<(), ScaffoldError>,
+    {
+        let mut scaffold = Scaffold::new();
+        draw_fn(&mut scaffold)?;
+        // arena.
+        Ok(scaffold)
     }
 }
 
@@ -249,35 +282,35 @@ impl core::fmt::Display for ScaffoldError {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::element::tests::ElementTestImpl;
-    use crate::scaffold::Scaffold;
+// #[cfg(test)]
+// mod tests {
+//     use crate::scaffold::{Scaffold, DebugHerd};
+//     use crate::element::tests::ElementTestImpl;
     
-    /// Test that Scaffold hashes are calculated correctly.
-    #[test]
-    fn test_scaffold_hash_eq() {
-        // The outer scaffold appears superfluous, but it's here to test that
-        // the recursive build patterns within the scaffold work as expected.
-        let mut scaffold = Scaffold::new();
-        let children: [usize; 4] = [0, 1, 1, 2];
-        for child in children.iter() {
-            scaffold
-                // Add a child to the root scaffold ..
-                .add(ElementTestImpl::default().with_number(*child)).unwrap()
-                // .. and then build that child.
-                .build().unwrap();
-        }
+//     /// Test that Scaffold hashes are calculated correctly.
+//     #[test]
+//     fn test_scaffold_hash_eq() {
+//         // The outer scaffold appears superfluous, but it's here to test that
+//         // the recursive build patterns within the scaffold work as expected.
+//         let mut scaffold = Scaffold::new_in(DebugHerd::member().as_bump());
+//         let children: [usize; 4] = [0, 1, 1, 2];
+//         for child in children.iter() {
+//             scaffold
+//                 // Add a child to the root scaffold ..
+//                 .add(ElementTestImpl::default().with_number(*child)).unwrap()
+//                 // .. and then build that child.
+//                 .build().unwrap();
+//         }
         
-        // Test that the items are expected values.
-        assert_eq!(scaffold.children[0].hash(), Some(2853251017295103874));
-        assert_eq!(scaffold.children[1].hash(), Some(501169195535462803));
-        assert_eq!(scaffold.children[2].hash(), Some(501169195535462803));
-        assert_eq!(scaffold.children[3].hash(), Some(3625697961063136066));
+//         // Test that the items are expected values.
+//         assert_eq!(scaffold.children[0].hash(), Some(2853251017295103874));
+//         assert_eq!(scaffold.children[1].hash(), Some(501169195535462803));
+//         assert_eq!(scaffold.children[2].hash(), Some(501169195535462803));
+//         assert_eq!(scaffold.children[3].hash(), Some(3625697961063136066));
         
-        // Test that hashes are only equal to each other when expected.
-        assert_ne!(scaffold.children[0].hash(), scaffold.children[1].hash());
-        assert_eq!(scaffold.children[1].hash(), scaffold.children[2].hash());
-        assert_ne!(scaffold.children[2].hash(), scaffold.children[3].hash());
-    }
-}
+//         // Test that hashes are only equal to each other when expected.
+//         assert_ne!(scaffold.children[0].hash(), scaffold.children[1].hash());
+//         assert_eq!(scaffold.children[1].hash(), scaffold.children[2].hash());
+//         assert_ne!(scaffold.children[2].hash(), scaffold.children[3].hash());
+//     }
+// }

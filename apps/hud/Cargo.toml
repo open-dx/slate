@@ -1,19 +1,15 @@
 [package]
-name = "hud"
+name = "slate-hud"
 version = "0.1.0"
 edition = "2021"
 
 #--
-default-run = "hud"
+default-run = "slate-hud"
 
 [[bin]]
-name = "hud"
-path = "src/bin/hud.rs"
+name = "slate-hud"
+path = "src/bin/main.rs"
 required-features = ["bevy"]
-
-[[bin]]
-name = "service"
-path = "src/bin/service.rs"
 
 #--
 [features]

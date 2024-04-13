@@ -1,6 +1,6 @@
-// use core::fmt::Display;
-// use core::fmt::Debug;
 use core::any::TypeId;
+use core::fmt::Debug;
+// use core::fmt::Display;
 
 use alloc::vec::Vec;
 // use alloc::format;
@@ -26,14 +26,14 @@ pub struct StyleSheet {
 impl core::fmt::Debug for StyleSheet {
     /// TODO
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let mut print_shape = f.debug_struct("StyleSheet");
+        let mut struct_fmt = f.debug_struct("StyleSheet");
         
         for (type_id, style_values) in &self.styles {
             let type_name = StylePropertyName::get(type_id).unwrap_or("Unknown");
-            print_shape.field(type_name, style_values);
+            struct_fmt.field(type_name, style_values);
         }
         
-        print_shape.finish()
+        struct_fmt.finish()
     }
 }
 
@@ -76,8 +76,9 @@ impl StyleSheet {
 
 pub struct StylePropertyName(TypeId, &'static str);
 
-static STYLE_PROPERTY_NAMES: [StylePropertyName; 14] = [
+static STYLE_PROPERTY_NAMES: [StylePropertyName; 16] = [
     StylePropertyName(TypeId::of::<Flex>(), "Flex"),
+    StylePropertyName(TypeId::of::<FlexGrow>(), "FlexGrow"),
     StylePropertyName(TypeId::of::<FlexDirection>(), "FlexDirection"),
     StylePropertyName(TypeId::of::<BackgroundColor>(), "BackgroundColor"),
     StylePropertyName(TypeId::of::<Margin>(), "Margin"),
@@ -89,6 +90,7 @@ static STYLE_PROPERTY_NAMES: [StylePropertyName; 14] = [
     StylePropertyName(TypeId::of::<MinHeight>(), "MinHeight"),
     StylePropertyName(TypeId::of::<MaxWidth>(), "MaxWidth"),
     StylePropertyName(TypeId::of::<MaxHeight>(), "MaxHeight"),
+    StylePropertyName(TypeId::of::<Gap>(), "Gap"),
     StylePropertyName(TypeId::of::<BorderWeight>(), "BorderWeight"),
     StylePropertyName(TypeId::of::<BorderColor>(), "BorderColor"),
 ];
@@ -97,13 +99,15 @@ impl StylePropertyName {
     /// TODO
     pub fn get(type_id: &TypeId) -> Option<&'static str> {
         STYLE_PROPERTY_NAMES.iter()
+            // Find the property that matches `type_id` ..
             .find(|StylePropertyName(id, _)| id == type_id)
+            // Return the found property name.
             .map(|StylePropertyName(_, name)| *name)
     }
 }
 
 /// TODO
-pub trait StyleValue: PartialEq + Into<StyleValueRef> {
+pub trait StyleValue: Debug + PartialEq + Into<StyleValueRef> {
     //..
 }
 

@@ -8,7 +8,7 @@ use bevy::ecs::system::Commands;
 use bevy::ecs::system::Query;
 use bevy::hierarchy::BuildChildren;
 use bevy::hierarchy::ChildBuilder;
-use bevy::hierarchy::DespawnRecursiveExt;
+// use bevy::hierarchy::DespawnRecursiveExt;
 use bevy::ui::prelude::*;
 use bevy::ui::node_bundles::NodeBundle;
 
@@ -20,7 +20,7 @@ use slate::scaffold::Scaffold;
 use slate::scaffold::ScaffoldError;
 // use slate::element::Element;
 use slate::element::ElementNode;
-use slate::element::DrawResult;
+use slate::element::DrawReport;
 use slate::element::UUID;
 use slate::style::StyleValueRef;
 use slate::style::primitive::Unit;
@@ -34,11 +34,11 @@ struct Size2d(Val, Val);
 /// TODO
 #[derive(Component)]
 pub struct SurfaceProvider {
-    /// TODO
+    /// The surface that provides the scene/ui/whatever
     surface: Surface<'static>,
     
-    /// TODO
-    root_entity: Option<Entity>,
+    /// The entity that represents the surface in the Bevy hierarchy.
+    surface_entity: Option<Entity>,
     
     /// TODO
     entity_index: HashMap<UUID, Entity>,
@@ -52,8 +52,8 @@ impl SurfaceProvider {
     /// TODO
     pub fn new() -> Self {
         SurfaceProvider {
-            surface: Surface::<'static>::new(None),
-            root_entity: None,
+            surface: Surface::<'static>::new(),
+            surface_entity: None,
             entity_index: HashMap::new(),
         }
     }
@@ -62,7 +62,7 @@ impl SurfaceProvider {
     pub fn from_surface(surface: Surface<'static>) -> Self {
         SurfaceProvider {
             surface,
-            root_entity: None,
+            surface_entity: None,
             entity_index: HashMap::new(),
         }
     }
@@ -100,17 +100,13 @@ impl SurfaceProvider {
     /// TODO
     pub fn draw<F>(&mut self, commands: &mut Commands, draw_fn: F)
     where
-        F: FnOnce(&mut Scaffold<'static>) -> Result<(), ScaffoldError>
+        F: FnOnce(&mut Scaffold) -> Result<(), ScaffoldError>
     {
-        let Some(surface_entity) = self.root_entity else {
-            return tracing::warn!("SurfaceProvider has no entity.");
-        };
-        
         match self.surface.draw(draw_fn) {
-            Ok(DrawResult::Success(mut updates)) => {
-                self.consume_updates(&mut updates, commands, surface_entity);
+            Ok(DrawReport::Success(mut updates)) => {
+                self.consume_updates(commands, &mut updates);
             }
-            Ok(DrawResult::Noop) => {
+            Ok(DrawReport::Noop) => {
                 tracing::trace!("No-op! <3");
             }
             Err(error) => {
@@ -119,32 +115,64 @@ impl SurfaceProvider {
         }
     }
     
-    /// TODO
-    fn consume_updates(&mut self, updates: &mut Vec<SurfaceUpdate>, commands: &mut Commands, surface_entity: Entity) {
-        let mut consumed_updates = HashMap::with_capacity(updates.len());
+    /// Consume updates from the surface and apply them to the Bevy hierarchy.
+    fn consume_updates(&mut self, commands: &mut Commands, surface_updates: &mut Vec<SurfaceUpdate>) {
+        // Get a copy of the surface Entity so we can operate on it.
+        // TODO: In some cases, we'll want to operate on an entity determined
+        //  by which node is being updated (e.g. when updating a node's style).
+        let Some(surface_entity) = self.surface_entity else {
+            return tracing::warn!("SurfaceProvider has no entity.");
+        };
         
-        // TODO: Build a full diagnostic report of the draw.
-        tracing::trace!("Found {:?} updates ..", updates.len());
+        // Stores a list of updates that have been consumed by the system.
+        // 
+        // Since we update recursively, we need to keep track of which
+        // updates have already made it into their destimation and which
+        // ones haven't so we don't duplicate render operations.
+        // 
+        // At the end of the update pass, this is drained into the entity
+        // index for use in future update calls, indexing, etc.
+        let mut consumed_updates = HashMap::with_capacity(surface_updates.len());
         
-        // TODO: Sort updates by kind:
+        #[cfg(feature = "verbose")]
+        tracing::trace!("Found {:?} updates ..", consumed_updates.len());
+        
+        // TODO: Evaluate: Sort updates by kind?
         //  1. Add
         //  2. Update
         //  3. Remove
 
         // TODO: Iterate over the vec of updates
-        for update in updates.drain(..).filter(|_| true) {
+        for update in surface_updates.drain(..).filter(|_| true) {
             match update {
                 SurfaceUpdate::Add(element_uuid) => {
+                    // Ensure we're not adding a node that's already been
+                    // added by a different recursive update operation.
+                    // 
+                    // Note: Direct node updates (via tools/editor, for
+                    //  example) are currently unsupported. See the TODO below.
+                    // 
+                    // TODO: An update may represent a node that was added
+                    //  as a child of another node as a direct update. In those
+                    //  cases, we'll need to lookup the parent of the current
+                    //  node and add the child to it.
+                    // 
+                    // TODO: This is a naive implementation. Can we do better
+                    //  via more direct updates?
                     if !consumed_updates.contains_key(&element_uuid) {
-                        commands.entity(surface_entity)
+                        commands
+                            .entity(surface_entity)
                             .with_children(|child_builder| {
-                                SurfaceProvider::spawn_element_node(child_builder, self.surface(), &element_uuid, &mut consumed_updates);
+                                self.spawn_element_node(child_builder, &element_uuid, &mut consumed_updates);
                             });
                     }
                 }
                 SurfaceUpdate::Update(element_uuid) => {
+                    // TODO: Update the node's style, children, etc.
                     match self.entity_index.get(&element_uuid) {
                         Some(element_entity) => {
+                            // We have a target entity for the update, so we:
+                            // TODO.
                             if let Some(element_node) = self.surface().get_node(&element_uuid) {
                                 let mut element_cmd = commands.entity(*element_entity);
                                 
@@ -170,25 +198,30 @@ impl SurfaceProvider {
             self.entity_index.insert(element_uuid, element_entity);
         }
         
-        if !updates.is_empty() {
+        if !surface_updates.is_empty() {
             // Any updates left in the updates vec are orphaned.
             // TODO: Handle these.
-            tracing::warn!("Unhandled updates: {:?}", updates);
+            tracing::warn!("Unhandled updates: {:?}", surface_updates);
         }
     }
     
     /// TODO
-    fn spawn_element_node(builder: &mut ChildBuilder, surface: &Surface, element_uuid: &UUID, consumed_updates: &mut HashMap<UUID, Entity>) {
-        match surface.get_node(element_uuid) {
+    fn spawn_element_node(&self, builder: &mut ChildBuilder, element_uuid: &UUID, consumed_updates: &mut HashMap<UUID, Entity>) {
+        // Get a copy of the surface Entity so we can operate on it.
+        let Some(surface_entity) = self.surface_entity else {
+            return tracing::warn!("SurfaceProvider has no entity.");
+        };
+        
+        match self.surface.get_node(element_uuid) {
             Some(element_node) => {
                 // TODO: Get the element's style from the surface.
                 let mut element_entity = builder.spawn(ElementNodeBundle::from(element_node));
                 
-                if let Some(element_children) = surface.get_children_of(&element_uuid) {
+                if let Some(element_children) = self.surface.get_children_of(&element_uuid) {
                     element_entity
                         .with_children(|child_builder| {
                             for child_element_node in element_children.into_iter() {
-                                SurfaceProvider::spawn_element_node(child_builder, surface, &child_element_node.uuid(), consumed_updates);
+                                self.spawn_element_node(child_builder, &child_element_node.uuid(), consumed_updates);
                             }
                         });
                 }
@@ -202,6 +235,21 @@ impl SurfaceProvider {
                 // TODO: Handle this error visually in the tree.
                 tracing::warn!("Can't find Element {:?} for rendering.", element_uuid);
                 return;
+            }
+        }
+    }
+    
+    fn update_element_node(&self, commands: &mut Commands, element_uuid: &UUID, element_entity: Entity) {
+        match self.surface().get_node(element_uuid) {
+            Some(element_node) => {
+                let mut element_cmd = commands.entity(element_entity);
+                
+                tracing::warn!("TODO: Update Bevy Node for {:?} at Node {:?}", element_uuid, element_entity);
+            }
+            
+            None => {
+                tracing::warn!("Attempting to update untracked node {:?}; Skipping ..", element_uuid);
+                return; // TODO: Pass the error off to a diagnostic report.
             }
         }
     }
@@ -242,7 +290,7 @@ pub(crate) fn setup_new_surface(
         let mut surface_cmd = commands.entity(surface_entity);
         
         surface_cmd.insert(SurfaceNodeBundle::from(surface_provider.surface()));
-        surface_provider.root_entity = Some(surface_entity);
+        surface_provider.surface_entity = Some(surface_entity);
         
         tracing::trace!("Surface `{:?}` changed ..", surface_entity);
     }

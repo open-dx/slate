@@ -30,23 +30,23 @@ harness = false
 uuid = { version = "1.6.1", default-features = false, features = ["v4", "v5"] }
 smallvec = "1.11.2"
 
-# Enables debugging options for the slate runtime.
+# Debugging options for the slate runtime.
 tracing = { version = "0.1.40", default-features = false, features = ["log"] }
 tracing-subscriber = { version = "0.3.18", default-features = false, features = ["alloc", "ansi", "fmt", "registry", "sharded-slab", "smallvec", "thread_local", "tracing-log", "env-filter"] }
-tracy-client = { version = "0.16.4", optional = true }
+tracy-client = { version = "0.17.0", optional = true }
 
 # Provides improved access-time for the surface element graph
 slotmap = { version = "1.0.6", default-features = false }
 
-# Offers improvided allocation performance to elements,
+# Offers improvided allocation performance for elements,
 # stylesheets, and other structures during scaffolding.
-bumpalo = { version = "3.14.0", features = ["allocator_api"] }
+bumpalo = { version = "3.14.0", features = ["allocator_api", "boxed", "collections"] }
 bumpalo-herd = "0.1.2"
 
 # Provides `allocator_api2` HashMap implementation so we can
 # do things like building the scaffold with Bumpalo.
-hashbrown = { version = "0.14.2", features = ["nightly"] }
-ahash = { version = "0.8.6", default-features = false }
+hashbrown = { version = "0.14.3", features = ["nightly"] }
+ahash = { version = "0.8.11", default-features = false }
 
 # Used by the stylesheet implementation for
 # faster(?) dynamic dispatch of style properties.

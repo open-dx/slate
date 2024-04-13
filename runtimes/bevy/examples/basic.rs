@@ -41,6 +41,7 @@ use slate::event::ClickEvent;
 use bevy_slate::BevySlatePlugin;
 use bevy_slate::provider::SurfaceProvider;
 
+use slate::style::StyleSheet;
 #[cfg(feature = "profiling")]
 use tracy_client::Client as TracyClient;
 
@@ -48,16 +49,16 @@ use tracy_client::Client as TracyClient;
 /// TODO
 #[cfg(feature = "debug")]
 #[cfg(not(feature = "verbose"))]
-const LOG_FILTER: &str = "info,basic=trace,slate=debug,bevy_slate=debug,wgpu_core=error,wgpu_hal=error";
+const LOG_FILTER: &str = "info,bevy_slate_basic=trace,bevy_slate=debug,slate=debug,wgpu_core=error,wgpu_hal=error";
 
 /// TODO
 #[cfg(not(feature = "debug"))]
 #[cfg(not(feature = "verbose"))]
-const LOG_FILTER: &str = "info,basic=trace,slate=info,bevy_slate=info,wgpu_core=error,wgpu_hal=error";
+const LOG_FILTER: &str = "info,bevy_slate_basic=trace,bevy_slate=info,slate=info,wgpu_core=error,wgpu_hal=error";
 
 /// TODO
 #[cfg(feature = "verbose")]
-const LOG_FILTER: &str = "info,basic=trace,slate=trace,bevy_slate=trace,wgpu_core=error,wgpu_hal=error";
+const LOG_FILTER: &str = "info,bevy_slate_basic=trace,bevy_slate=trace,slate=trace,wgpu_core=error,wgpu_hal=error";
 
 //---
 /// TODO
@@ -109,6 +110,7 @@ fn main() -> Result<ExitCode> {
                         backends: Some(Backends::DX12),
                         ..default()
                     }),
+                    ..default()
                 })
         })
         // Load the Slate plugin, which provides the `SurfaceProvider` resource
@@ -166,9 +168,15 @@ fn draw_basic_surface(
         // let thickums = Some(100.);
         let thickums = None;
         
-        let on_click_fn = move |evt: &ClickEvent| {
-            println!("Clicked: {0:?}", evt);
+        let on_click_fn = |evt: &ClickEvent| {
+            tracing::debug!("Clicked:\n{0:#?}", evt);
         };
+        
+        let some_shared_styles = |styles: &mut StyleSheet| {
+            tracing::debug!("Styles:\n{0:#?}", styles);
+        };
+        
+        // use slate::element::
         
         surface.draw(&mut commands, chizel::uix! {
             // Styles can be defined in a style block.
@@ -185,7 +193,8 @@ fn draw_basic_surface(
             // In the above, stylesheet is an isolated style container and the
             // closure is used to build elements in the style sheet.
             // 
-            // These closures are then passed to elements with `#[class(..)]`.
+            // The resulting closure is then passed to elements with `#[class(..)]`.
+            // 
             // Note: Style-block closures can also be built manually or passed
             // from other functions.
             .header, .footer {
@@ -214,6 +223,7 @@ fn draw_basic_surface(
             #[style(FlexGrow::new(1.))]
             #[style(Gap::new(10.))]
             #[style(Padding::all(10., 10., 10., 10.))]
+            #[class(some_shared_styles)]
             <Container number=update_time>
                 #[when(root01_name == "First Root")]
                 #[on(Click, on_click_fn)]

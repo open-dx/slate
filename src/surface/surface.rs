@@ -1,20 +1,83 @@
 use core::fmt::Debug;
 
 use alloc::vec::Vec;
+use bumpalo::Bump;
+use bumpalo_herd::Member;
 
 use crate::scaffold::Scaffold;
 use crate::scaffold::ScaffoldError;
+// use crate::scaffold::DebugHerd;
 // use crate::element::Element;
 use crate::element::ElementNode;
-use crate::element::DrawResult;
+use crate::element::DrawReport;
 use crate::element::UUID;
 use crate::x::HashMap;
 // use crate::xtra::Entry;
 
 //---
-/// TODO
+/// A `Surface` is a managed, reactive composition target for drawing visual
+/// elements to various output renderers. It's primarily responsible for
+/// managing the lifecycle and hierarchy of elements it holds, and reporting
+/// updates to a rendering front-end.
+/// 
+/// It can represent any kind of visual output, including a DOM, a scene graph,
+/// a terminal, etc. It's designed to be renderer-agnostic and can be used
+/// with any renderer that can consume the `DrawReport` it produces.
+/// 
+/// It also provides several quality-of-life features for improved ergonomics
+/// during development, debugging, monitoring, etc.
+/// 
+/// ## Guide: Managed Updates
+/// 1. Create a new Surface:
+/// ```rust
+/// let mut surface = Surface::new(UUID::new_v4());
+/// // Configure, bootstrap, etc.
+/// ```
+/// 
+/// 2. Add elements to the surface:
+/// ```rust
+/// // Elements are added to a surface by passing a `DrawFn` to the
+/// // `surface.draw(..)` method. The `DrawFn` is used to build a `Scaffold`,
+/// // compare it to the current state of the surface, and report changes.
+/// // 
+/// // The resulting `DrawReport` is used by the renderer to sync the surface
+/// // with the scene/dom/whatever.
+/// let draw_report = surface.draw(chizel::uix! {
+///     <Container>
+///         <Paragraph text="TODO" />
+///     </Container>
+/// });
+/// ```
+/// 
+/// 3. Pass updates to a renderer:
+/// ```rust
+/// // The draw report is designed to be consumed by a renderer.
+/// match draw_report {
+///     // A successful draw result contains a list of updates. The renderer
+///     // should apply these updates to the computed UI, scene, etc.
+///     Ok(DrawResult::Success(mut updates)) => {
+///         self.consume_updates(&mut updates);
+///     }
+///     // A no-op draw result indicates that no updates were made, which
+///     // means all operations involved in the draw were successful but no
+///     // differences were found between the scaffold and the previous state
+///     // of the surface.
+///     // 
+///     // Generally, the renderer can safely advance.
+///     Ok(DrawResult::Noop) => {
+///         tracing::trace!("No-op! <3");
+///     }
+///     // An error here means something didn't go as planned. The renderer
+///     // should 1) log the error, 2) (optionally) display an error message
+///     // to the user, and 3) decide what to do next (re-draw attempt, etc.).
+///     Err(error) => {
+///         tracing::error!("Failed to draw Surface: {}", error);
+///     }
+/// }
+/// ```
 pub struct Surface<'surface> {
     /// The UUID of the surface.
+    #[cfg(feature = "debug")]
     uuid: UUID,
     
     /// The nodes of the surface.
@@ -32,9 +95,10 @@ pub struct Surface<'surface> {
 
 impl<'surface> Surface<'surface> {
     /// Creates a new Surface using the Global allocator.
-    pub fn new(uuid: Option<UUID>) -> Self {
+    pub fn new() -> Self {
         Surface {
-            uuid: uuid.unwrap_or_else(|| UUID::new_v4()),
+            #[cfg(feature = "debug")]
+            uuid: UUID::new_v4(),
             nodes: Vec::new(),
             index: HashMap::new(),
             roots: Vec::new(),
@@ -44,21 +108,38 @@ impl<'surface> Surface<'surface> {
 }
 
 impl<'surface> Surface<'surface> {
-    /// TODO
+    /// Get a node from the surface.
+    /// 
+    /// ```rust
+    /// let node: ElementNode<'surface> = surface.get_node(&uuid);
+    /// ```
     pub fn get_node(&self, uuid: &UUID) -> Option<&ElementNode<'surface>> {
         self.nodes.get(*self.index.get(uuid)?)
     }
     
-    /// TODO
+    /// Get a mutable reference to a node from the surface.
+    /// 
+    /// ```rust
+    /// let node: &mut ElementNode<'surface> = surface.get_node_mut(&uuid);
+    /// ```
     pub fn get_node_mut(&mut self, uuid: &UUID) -> Option<&mut ElementNode<'surface>> {
         self.nodes.get_mut(*self.index.get(uuid)?)
     }
     
+    /// Get the roots of the surface.
+    /// 
+    /// ```rust
+    /// let roots: Vec<&ElementNode<'surface>> = surface.get_roots().collect();
+    /// ```
     pub fn get_roots(&self) -> impl Iterator<Item = &ElementNode<'surface>> {
         self.roots.iter().filter_map(move |node_index| self.nodes.get(*node_index))
     }
     
-    /// TODO
+    /// Get the children of a node from the surface.
+    /// 
+    /// ```rust
+    /// let children: Vec<&ElementNode<'surface>> = surface.get_children_of(&uuid).collect();
+    /// ```
     pub fn get_children_of(&'surface self, parent_uuid: &UUID) -> Option<impl Iterator<Item = &'surface ElementNode<'surface>> + 'surface> {
         let parent_index = self.index.get(parent_uuid)?;
         let children = self.edges.get(parent_index)?;
@@ -67,16 +148,24 @@ impl<'surface> Surface<'surface> {
 }
 
 impl<'surface> Surface<'surface> {
-    /// TODO
-    pub fn draw<F>(&mut self, draw_fn: F) -> Result<DrawResult, ScaffoldError>
+    /// Draws the given `DrawFn` to the surface.
+    /// 
+    /// ```rust
+    /// let draw_report = surface.draw(chizel::uix! {
+    ///     <Container>
+    ///         <Paragraph text="TODO" />
+    ///     </Container>
+    /// })?;
+    pub fn draw<F>(&mut self, draw_fn: F) -> Result<DrawReport, ScaffoldError>
     where
-        F: FnOnce(&mut Scaffold<'surface>) -> Result<(), ScaffoldError>
+        F: FnOnce(&mut Scaffold) -> Result<(), ScaffoldError>
     {
         #[cfg(feature = "debug")]
         tracing::trace!("Drawing on Surface({:?}) ..", self.uuid);
         
-        // The scaffold is a temporary structure used to build the current
+        // A scaffold is a temporary structure used to build the current
         // pass of the surface, which is used to apply collected updates.
+        // TODO: Get the bump from a herd on the surface.
         let mut scaffold = Scaffold::new();
         draw_fn(&mut scaffold)?;
         
@@ -94,14 +183,14 @@ impl<'surface> Surface<'surface> {
         }
         
         if updates.len() > 0 {
-            Ok(DrawResult::Success(updates))
+            Ok(DrawReport::Success(updates))
         } else {
-            Ok(DrawResult::Noop)
+            Ok(DrawReport::Noop)
         }
     }
     
-    /// TODO
-    fn apply_scaffold(&mut self, scaffold: &mut Scaffold<'surface>, parent_index: Option<usize>, cursor: usize, force: bool, updates: &mut Vec<SurfaceUpdate>) -> Result<usize, ScaffoldError> {
+    /// Applies a given scaffold to the surface. Designed for recursive use.
+    fn apply_scaffold(&mut self, scaffold: &mut Scaffold, parent_index: Option<usize>, cursor: usize, force: bool, updates: &mut Vec<SurfaceUpdate>) -> Result<usize, ScaffoldError> {
         // Get the existing UUID at the current cursor position.
         let existing_element_index = match parent_index {
             // Parent provided; Attempt to get existing child UUID at `cursor`.
@@ -109,7 +198,9 @@ impl<'surface> Surface<'surface> {
                 // .. and use it to get the index for the item at `cursor`.
                 // Evaluates to Some(UUID) when the parent exists and has
                 // a child at `index`.
-                self.edges.get(&parent_index).and_then(|edges| edges.get(cursor).map(|uuid| *uuid))
+                self.edges.get(&parent_index).and_then(|edges| {
+                    edges.get(cursor).map(|uuid| *uuid)
+                })
             }
             
             // No parent provided; Check the root index.

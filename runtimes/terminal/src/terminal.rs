@@ -40,7 +40,7 @@ use slate::surface::Surface;
 // use slate::surface::SurfaceError;
 use slate::scaffold::Scaffold;
 use slate::scaffold::ScaffoldError;
-use slate::element::DrawResult;
+use slate::element::DrawReport;
 use slate::element::UUID;
 use slate::x::HashMap;
 
@@ -86,7 +86,7 @@ impl<'surface> TerminalSurface<'surface, Stdout> {
 impl<'surface, W: Write> TerminalSurface<'surface, W> {
     /// TODO
     pub fn new_for(writer: W) -> Self {
-        TerminalSurface::new_for_on(writer, Surface::new(None))
+        TerminalSurface::new_for_on(writer, Surface::new())
     }
     
     /// TODO
@@ -267,9 +267,9 @@ impl<'surface, W: Write> TerminalSurface<'surface, W> {
 
 impl<'surface, W: Write> TerminalSurface<'surface, W> {
     /// TODO
-    pub fn draw<F>(&mut self, draw_fn: F) -> Result<DrawResult, ScaffoldError>
+    pub fn draw<F>(&mut self, draw_fn: F) -> Result<DrawReport, ScaffoldError>
     where
-        F: FnOnce(&mut Scaffold<'surface>) -> Result<(), ScaffoldError>
+        F: FnOnce(&mut Scaffold) -> Result<(), ScaffoldError>
     {
         self.surface.draw(draw_fn)
     }

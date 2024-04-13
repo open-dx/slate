@@ -1,0 +1,6 @@
+[book]
+authors = ["Lorren Biffin"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Slate Book"

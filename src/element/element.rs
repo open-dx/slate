@@ -5,7 +5,8 @@ use alloc::vec::Vec;
 
 // use crate::surface::SurfaceError;
 use crate::surface::SurfaceUpdate;
-use crate::scaffold::{Scaffold, ScaffoldError};
+use crate::scaffold::Scaffold;
+use crate::scaffold::ScaffoldError;
 // use crate::style::Style;
 // use crate::style::StyleProperty;
 use crate::style::StyleSheet;
@@ -258,11 +259,11 @@ impl core::fmt::Display for ElementError {
     }
 }
 
-pub type DrawFn<'scaffold> = fn(&mut Scaffold<'scaffold>) -> Result<(), ScaffoldError>;
+pub type DrawFn = fn(&mut Scaffold) -> Result<(), ScaffoldError>;
 
 /// TODO
 #[derive(Default, Debug)]
-pub enum DrawResult {
+pub enum DrawReport {
     /// TODO
     Success(Vec<SurfaceUpdate>),
     
