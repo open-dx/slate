@@ -1,8 +1,11 @@
 use core::fmt::Debug;
 
+use alloc::boxed::Box;
 use alloc::vec::Vec;
+
 use bumpalo::Bump;
-use bumpalo_herd::Member;
+#[cfg(feature = "bump")]
+use bumpalo_herd::Herd;
 
 use crate::scaffold::Scaffold;
 use crate::scaffold::ScaffoldError;
@@ -11,7 +14,7 @@ use crate::scaffold::ScaffoldError;
 use crate::element::ElementNode;
 use crate::element::DrawReport;
 use crate::element::UUID;
-use crate::x::HashMap;
+use crate::collections::HashMap;
 // use crate::xtra::Entry;
 
 //---
@@ -75,7 +78,7 @@ use crate::x::HashMap;
 ///     }
 /// }
 /// ```
-pub struct Surface<'surface> {
+pub struct Surface<'surface, Index=UUID> {
     /// The UUID of the surface.
     #[cfg(feature = "debug")]
     uuid: UUID,
@@ -84,7 +87,7 @@ pub struct Surface<'surface> {
     nodes: Vec<ElementNode<'surface>>,
     
     /// An index to the element nodes of the scaffold.
-    index: HashMap<UUID, usize>,
+    index: HashMap<Index, usize>,
     
     /// An index to the root nodes of the scaffold.
     roots: Vec<usize>,
@@ -114,7 +117,7 @@ impl<'surface> Surface<'surface> {
     /// let node: ElementNode<'surface> = surface.get_node(&uuid);
     /// ```
     pub fn get_node(&self, uuid: &UUID) -> Option<&ElementNode<'surface>> {
-        self.nodes.get(*self.index.get(uuid)?)
+        self.index.get(uuid).and_then(|i| self.nodes.get(*i))
     }
     
     /// Get a mutable reference to a node from the surface.
@@ -132,7 +135,9 @@ impl<'surface> Surface<'surface> {
     /// let roots: Vec<&ElementNode<'surface>> = surface.get_roots().collect();
     /// ```
     pub fn get_roots(&self) -> impl Iterator<Item = &ElementNode<'surface>> {
-        self.roots.iter().filter_map(move |node_index| self.nodes.get(*node_index))
+        self.roots.iter().filter_map(move |node_index| {
+            self.nodes.get(*node_index)
+        })
     }
     
     /// Get the children of a node from the surface.
@@ -143,7 +148,26 @@ impl<'surface> Surface<'surface> {
     pub fn get_children_of(&'surface self, parent_uuid: &UUID) -> Option<impl Iterator<Item = &'surface ElementNode<'surface>> + 'surface> {
         let parent_index = self.index.get(parent_uuid)?;
         let children = self.edges.get(parent_index)?;
-        Some(children.iter().filter_map(|child_index| self.nodes.get(*child_index)))
+        Some(children.iter().filter_map(|child_index| {
+            self.nodes.get(*child_index)
+        }))
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct Context<'ctx> {
+    arena: &'ctx Bump,
+}
+
+impl<'ctx> Context<'ctx> {
+    pub fn new_in(arena: &'ctx Bump) -> Self {
+        Context {
+            arena
+        }
+    }
+    
+    pub fn arena(&self) -> &Bump {
+        self.arena
     }
 }
 
@@ -163,10 +187,23 @@ impl<'surface> Surface<'surface> {
         #[cfg(feature = "debug")]
         tracing::trace!("Drawing on Surface({:?}) ..", self.uuid);
         
+        // Get a new bump for the scaffold to build it's internal tree.
+        // let alloc = bumpalo::Bump::new();
+        #[cfg(feature = "bump")]
+        let alloc = crate::arena::get();
+        
+        #[cfg(feature = "bump")]
+        let ctx = Context::new_in(alloc.as_bump());
+        
         // A scaffold is a temporary structure used to build the current
         // pass of the surface, which is used to apply collected updates.
         // TODO: Get the bump from a herd on the surface.
+        #[cfg(feature = "bump")]
+        let mut scaffold = Scaffold::new_in(ctx.arena());
+        
+        #[cfg(not(feature = "bump"))]
         let mut scaffold = Scaffold::new();
+        
         draw_fn(&mut scaffold)?;
         
         // As we traverse the tree and apply changes, updates are collected
@@ -174,49 +211,49 @@ impl<'surface> Surface<'surface> {
         let mut updates = Vec::new();
         
         // When the number of roots changes, we force a full update of the
-        //  surface to ensure all indexes are updated.
-        // TODO: Move this to the apply_scaffold method.
-        let force = self.roots.len() != scaffold.children().len();
+        // surface to ensure all indexes are updated.
+        let force_updates = self.roots.len() != scaffold.children().len();
         
-        for (cursor, mut root) in scaffold.children_mut().into_iter().enumerate() {
-            self.apply_scaffold(&mut root, None, cursor, force, &mut updates)?;
+        // Enumerate each root-level element within the scaffolding tree
+        // and apply the scaffold at the given cursor/index.
+        for (index, mut root) in scaffold.children_mut().into_iter().enumerate() {
+            self.apply_scaffold(root, None, index, force_updates, &mut updates)?;
         }
         
-        if updates.len() > 0 {
-            Ok(DrawReport::Success(updates))
-        } else {
+        if updates.len() == 0 {
             Ok(DrawReport::Noop)
+        } else {
+            Ok(DrawReport::Success(updates))
         }
     }
     
     /// Applies a given scaffold to the surface. Designed for recursive use.
-    fn apply_scaffold(&mut self, scaffold: &mut Scaffold, parent_index: Option<usize>, cursor: usize, force: bool, updates: &mut Vec<SurfaceUpdate>) -> Result<usize, ScaffoldError> {
+    fn apply_scaffold(&mut self, scaffold: &mut Scaffold, parent_index: Option<usize>, current_index: usize, force_updates: bool, updates: &mut Vec<SurfaceUpdate>) -> Result<usize, ScaffoldError> {
         // Get the existing UUID at the current cursor position.
-        let existing_element_index = match parent_index {
-            // Parent provided; Attempt to get existing child UUID at `cursor`.
+        let prev_element_index = match parent_index {
+            // Parent provided; Attempt to get existing child index at `cursor`.
             Some(parent_index) => {
-                // .. and use it to get the index for the item at `cursor`.
-                // Evaluates to Some(UUID) when the parent exists and has
-                // a child at `index`.
+                // .. and use it to get the child index for the item at `current_index`.
+                // Evaluates to Some(index) when the parent exists and has
+                // a child at `current_index`.
                 self.edges.get(&parent_index).and_then(|edges| {
-                    edges.get(cursor).map(|uuid| *uuid)
+                    edges.get(current_index).map(|index| *index)
                 })
             }
             
             // No parent provided; Check the root index.
             None => {
-                // Evaluates to Some(UUID) when a root exists at `cursor`.
-                self.roots.get(cursor).map(|node_index| *node_index)
+                // Evaluates to Some(index) when a root exists at `cursor`.
+                self.roots.get(current_index).map(|node_index| *node_index)
             }
         };
         
-        // Get the concrete UUID for the current node.
-        let element_index = match existing_element_index {
-            // An existing UUID was found. Attempt to update the node.
+        // Get the concrete index for the current node.
+        let next_element_index = match prev_element_index {
             Some(element_index) => {
-                let element_node = self.nodes.get_mut(element_index).ok_or(ScaffoldError::CursorOutOfBounds)?;
-                
-                let should_update = force || scaffold.has_changes(element_node)?;
+                // An existing index was found. Attempt to update the node.
+                let element_node = self.nodes.get_mut(element_index).ok_or(ScaffoldError::IndexOutOfBounds(element_index))?;
+                let should_update = force_updates || scaffold.has_changes(element_node)?;
                 
                 #[cfg(feature = "verbose")]
                 tracing::debug!("Element({:?}) should update? ({:?})", element_node.uuid(), should_update);
@@ -224,7 +261,7 @@ impl<'surface> Surface<'surface> {
                 if should_update {
                     let element_uuid = element_node.uuid();
                     
-                    element_node.set_element(scaffold.take_element());
+                    element_node.set_element(scaffold.take_element_boxed());
                     element_node.set_hash(scaffold.hash().ok_or(ScaffoldError::HashMissing)?);
                     
                     // TODO: Overwrite the stylesheet and event handlers.
@@ -235,39 +272,48 @@ impl<'surface> Surface<'surface> {
                 
                 element_index
             }
-            
-            // No existing UUID found. Create a new node.
             None => {
-                let mut element_node = ElementNode::new(scaffold.take_element());
-                #[cfg(feature = "verbose")]
-                tracing::debug!("Created Element({:?})", element_node.uuid());
+                // No existing UUID found. Create a new node.
+                let mut element_node = ElementNode::<'surface>::new(scaffold.take_element_boxed());
+                
+                #[cfg(feature="verbose")]
+                tracing::debug!("Created new ElementNode#{:?}", element_node.uuid());
                 
                 // TODO: This should probably be done in the ElementNode::from(Scaffold) impl.
                 element_node.set_hash(scaffold.hash().ok_or(ScaffoldError::HashMissing)?);
-                element_node.stylesheet_mut().append(scaffold.stylesheet_mut());
+                
+                element_node.stylesheet_mut().extend(scaffold.stylesheet_mut());
+                // for (kind, styles) in scaffold.stylesheet_mut().drain().into_iter() {
+                //     for style in styles.iter() {
+                //         element_node.stylesheet_mut().push(style.into());
+                //     }
+                // }
                 
                 let element_uuid = element_node.uuid();
                 let element_index = self.add_node(element_node)?;
                 
                 updates.push(SurfaceUpdate::Add(element_uuid));
-                tracing::debug!("Added Element({:?})!", element_uuid);
-                #[cfg(feature = "inspect")]
-                tracing::debug!("Element:\n{:#?}", self.get_node(&element_uuid));
+                
+                #[cfg(all(feature="verbose", not(feature="inspect")))]
+                tracing::debug!("Added ElementNode#{:?} to Surface!", element_uuid);
+                
+                #[cfg(all(feature="verbose", feature="inspect"))]
+                tracing::debug!("Added ElementNode:\n{:#?}", self.get_node(&element_uuid));
                 
                 element_index
             }
         };
         
-        if parent_index == None && !self.roots.contains(&element_index) {
-            self.roots.push(element_index);
+        if parent_index == None && !self.roots.contains(&next_element_index) {
+            self.roots.push(next_element_index);
         }
         
         for (cursor, mut child) in scaffold.children_mut().into_iter().enumerate() {
-            let child_uuid = self.apply_scaffold(&mut child, Some(element_index), cursor, false, updates)?;
-            self.edges.entry(element_index).or_insert_with(Vec::new).push(child_uuid);
+            let child_uuid = self.apply_scaffold(&mut child, Some(next_element_index), cursor, false, updates)?;
+            self.edges.entry(next_element_index).or_insert_with(Vec::new).push(child_uuid);
         }
         
-        Ok(element_index)
+        Ok(next_element_index)
     }
     
     /// TODO

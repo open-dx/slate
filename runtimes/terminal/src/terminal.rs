@@ -42,7 +42,7 @@ use slate::scaffold::Scaffold;
 use slate::scaffold::ScaffoldError;
 use slate::element::DrawReport;
 use slate::element::UUID;
-use slate::x::HashMap;
+use slate::collections::HashMap;
 
 use crate::element::ElementBlock;
 use crate::element::Padding;

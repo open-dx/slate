@@ -1,121 +1,100 @@
+use std::path::PathBuf;
+
+use bevy::window::WindowMode;
+use bevy::DefaultPlugins;
 use bevy::app::App;
 use bevy::app::Plugin;
 use bevy::app::PreUpdate;
 use bevy::app::PluginGroup;
-use bevy::app::PluginGroupBuilder;
+use bevy::app::PostStartup;
+use bevy::app::PreStartup;
+use bevy::app::Startup;
+// use bevy::app::PluginGroupBuilder;
+use bevy::asset::AssetPlugin;
+use bevy::color::Color;
+use bevy::render::view::Msaa;
+use bevy::render::camera::ClearColor;
+use bevy::window::Window;
+use bevy::window::WindowLevel;
+use bevy::winit::WinitSettings;
+use bevy::log::LogPlugin;
 
-use crate::provider::setup_new_surface;
+use crate::config::BevySlateConfig;
+use crate::window::WindowPlugin;
+use crate::window::WindowKind;
 
-pub struct BevySlatePlugin;
+#[derive(Default)]
+pub struct BevySlatePlugin {
+    config: BevySlateConfig,
+}
 
-impl Plugin for BevySlatePlugin {
-    fn build(&self, app: &mut App) {
-        app
-            .add_systems(PreUpdate, setup_new_surface);
+impl BevySlatePlugin {
+    pub fn new(config: BevySlateConfig) -> Self {
+        BevySlatePlugin {
+            config,
+        }
     }
 }
 
-//---
-/// TODO: Make configurable.
-pub struct DefaultPlugins;
-
-impl PluginGroup for DefaultPlugins {
-    fn build(self) -> PluginGroupBuilder {
-        let mut group = PluginGroupBuilder::start::<Self>();
-        group = group
-            .add(bevy::log::LogPlugin::default())
-            .add(bevy::core::TaskPoolPlugin::default())
-            .add(bevy::core::TypeRegistrationPlugin)
-            .add(bevy::core::FrameCountPlugin)
-            .add(bevy::time::TimePlugin)
-            .add(bevy::transform::TransformPlugin)
-            .add(bevy::hierarchy::HierarchyPlugin)
-            .add(bevy::diagnostic::DiagnosticsPlugin)
-            .add(bevy::input::InputPlugin)
-            .add(bevy::window::WindowPlugin::default())
-            .add(bevy::a11y::AccessibilityPlugin);
-
-        #[cfg(feature = "bevy/asset")]
-        {
-            group = group.add(bevy::asset::AssetPlugin::default());
+impl Plugin for BevySlatePlugin {
+    fn build(&self, app: &mut App) {
+        app.insert_resource(WinitSettings::desktop_app());
+        app.insert_resource(ClearColor(self.config.clear_color));
+        
+        app.add_event::<crate::window::WindowEvent>();
+        
+        if self.config.bevy_defaults {
+            tracing::debug!("Enabling Bevy's default plugins ..");
+            app.add_plugins(self.get_bevy_defaults());
         }
-
-        #[cfg(feature = "bevy/scene")]
+        
+        #[cfg(feature = "terminal")]
         {
-            group = group.add(bevy::scene::ScenePlugin);
+            app.add_plugins(crate::terminal::TerminalPlugin::new());
         }
+        
+        app.add_plugins(crate::reticle::ReticlePlugin::new());
+        
+        app.add_systems(Startup, crate::provider::setup_new_surface);
+    }
+}
 
-        #[cfg(feature = "bevy/winit")]
-        {
-            group = group.add(bevy::winit::WinitPlugin::default());
+impl BevySlatePlugin {
+    /// Utility method returning a set of default bevy plugins optmized for Slate.
+    fn get_bevy_defaults(&self) -> bevy::app::PluginGroupBuilder {
+        bevy::DefaultPlugins
+            // Tell the built-in Asset Plugin where to find our files.
+            .set(AssetPlugin {
+                file_path: self.config.asset_dir.clone(),
+                watch_for_changes_override: Some(true),
+                ..Default::default()
+            })
+            // TODO: Diable the built-in WindowPlugin and use our wrapper plugin instead.
+            // Ex: `.disable::<bevy::log::WindowPlugin>()`
+            .set(bevy::window::WindowPlugin {
+                primary_window: Some(self.create_window("HUD", 480.0, 600.0)),
+                exit_condition: bevy::window::ExitCondition::OnAllClosed,
+                ..Default::default()
+            })
+            // Prefer Slate's logging facilities.
+            .disable::<bevy::log::LogPlugin>()
+    }
+    
+    /// Utility method to create a new window descriptor for windows managed by
+    /// this window factory.
+    fn create_window(&self, title: &str, width: f32, height: f32) -> Window {
+        Window {
+            title: String::from(title),
+            mode: WindowMode::Windowed,
+            resolution: bevy::window::WindowResolution::new(width, height),
+            transparent: false,
+            decorations: true,
+            visible: true,
+            resizable: true,
+            position: bevy::window::WindowPosition::Centered(bevy::window::MonitorSelection::Current),
+            composite_alpha_mode: bevy::window::CompositeAlphaMode::Auto,
+            window_level: WindowLevel::Normal,
+            ..Default::default()
         }
-
-        #[cfg(feature = "bevy/render")]
-        {
-            group = group
-                .add(bevy::render::RenderPlugin::default())
-                // NOTE: Load this after renderer initialization so that it knows about the supported
-                // compressed texture formats
-                .add(bevy::render::texture::ImagePlugin::default());
-
-            #[cfg(all(not(target_arch = "wasm32"), feature = "multi-threaded"))]
-            {
-                group = group.add(bevy::render::pipelined_rendering::PipelinedRenderingPlugin);
-            }
-        }
-
-        #[cfg(feature = "bevy/core_pipeline")]
-        {
-            group = group.add(bevy::core_pipeline::CorePipelinePlugin);
-        }
-
-        #[cfg(feature = "bevy/sprite")]
-        {
-            group = group.add(bevy::sprite::SpritePlugin);
-        }
-
-        #[cfg(feature = "bevy/text")]
-        {
-            group = group.add(bevy::text::TextPlugin);
-        }
-
-        #[cfg(feature = "bevy/ui")]
-        {
-            group = group.add(bevy::ui::UiPlugin);
-        }
-
-        #[cfg(feature = "bevy/pbr")]
-        {
-            group = group.add(bevy::pbr::PbrPlugin::default());
-        }
-
-        // NOTE: Load this after renderer initialization so that it knows about the supported
-        // compressed texture formats
-        #[cfg(feature = "bevy/gltf")]
-        {
-            group = group.add(bevy::gltf::GltfPlugin::default());
-        }
-
-        #[cfg(feature = "bevy/audio")]
-        {
-            group = group.add(bevy::audio::AudioPlugin::default());
-        }
-
-        #[cfg(feature = "bevy/gilrs")]
-        {
-            group = group.add(bevy::gilrs::GilrsPlugin);
-        }
-
-        #[cfg(feature = "bevy/animation")]
-        {
-            group = group.add(bevy::animation::AnimationPlugin);
-        }
-
-        #[cfg(feature = "bevy/gizmos")]
-        {
-            group = group.add(bevy::gizmos::GizmoPlugin);
-        }
-
-        group
     }
 }

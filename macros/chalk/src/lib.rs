@@ -10,7 +10,7 @@ use syn::parse_macro_input;
 // use syn::parse_quote;
 
 #[proc_macro_derive(StyleProperty)]
-pub fn new_typemap_feature(input: TokenStream) -> TokenStream {
+pub fn asdf_style_property(input: TokenStream) -> TokenStream {
     let _ast = parse_macro_input!(input as DeriveInput);
     // TODO: Generate code for new typemap feature
     let gen = quote! {
@@ -20,7 +20,7 @@ pub fn new_typemap_feature(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_derive(Unit)]
-pub fn unit_derive(input: TokenStream) -> TokenStream {
+pub fn asdf_unit(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     let name = &ast.ident;
     
@@ -30,10 +30,7 @@ pub fn unit_derive(input: TokenStream) -> TokenStream {
             pub fn new<U: Into<Unit>>(value: U) -> Self {
                 Self(value.into())
             }
-        }
-        
-        #[automatically_derived]
-        impl #name {
+            
             pub fn unit(&self) -> &Unit {
                 &self.0
             }
@@ -63,14 +60,14 @@ pub fn unit_derive(input: TokenStream) -> TokenStream {
         }
 
         #[automatically_derived]
-        impl Into<StyleValueRef> for #name {
-            fn into(self) -> StyleValueRef {
-                StyleValueRef::#name(self)
+        impl Into<StyleValue> for #name {
+            fn into(self) -> StyleValue {
+                StyleValue::#name(self)
             }
         }
 
         #[automatically_derived]
-        impl StyleValue for #name {
+        impl Style for #name {
             //..
         }
     };
@@ -79,7 +76,7 @@ pub fn unit_derive(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_derive(Rect)]
-pub fn rect_derive(input: TokenStream) -> TokenStream {
+pub fn derive_rect(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     let name = &ast.ident;
     
@@ -97,6 +94,12 @@ pub fn rect_derive(input: TokenStream) -> TokenStream {
             #[inline(always)]
             pub fn all<U1: Into<Unit<f32>>, U2: Into<Unit<f32>>, U3: Into<Unit<f32>>, U4: Into<Unit<f32>>>(top: U1, right: U2, bottom: U3, left: U4) -> Self {
                 #name(Rect::all(top, right, bottom, left))
+            }
+            
+            /// TODO
+            #[inline(always)]
+            pub fn xy<U1: Into<Unit<f32>> + Copy, U2: Into<Unit<f32>> + Copy>(x: U1, y: U2) -> Self {
+                #name(Rect::all(y, x, y, x))
             }
         }
         
@@ -128,15 +131,15 @@ pub fn rect_derive(input: TokenStream) -> TokenStream {
         }
         
         #[automatically_derived]
-        impl Into<StyleValueRef> for #name {
+        impl Into<StyleValue> for #name {
             /// TODO
-            fn into(self) -> StyleValueRef {
-                StyleValueRef::#name(self)
+            fn into(self) -> StyleValue {
+                StyleValue::#name(self)
             }
         }
         
         #[automatically_derived]
-        impl StyleValue for #name {
+        impl Style for #name {
             //..
         }
     };
@@ -145,7 +148,7 @@ pub fn rect_derive(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_derive(Size2d)]
-pub fn size2d_derive(input: TokenStream) -> TokenStream {
+pub fn derive_size2d(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
         let name = &ast.ident;
     
@@ -153,13 +156,13 @@ pub fn size2d_derive(input: TokenStream) -> TokenStream {
         impl #name {
             /// TODO
             #[inline(always)]
-            pub fn new<U1: Into<Unit<f32>>, U2: Into<Unit<f32>>, U3: Into<Unit<f32>>, U4: Into<Unit<f32>>>(x: U1, y: U2) -> Self {
+            pub fn new<U1: Into<Unit<f32>>, U2: Into<Unit<f32>>>(x: U1, y: U2) -> Self {
                 #name ::xy(x, y)
             }
             
             /// TODO
             #[inline(always)]
-            pub fn both<U1: Into<Unit<f32>>, U2: Into<Unit<f32>>, U3: Into<Unit<f32>>, U4: Into<Unit<f32>>>(x: U1, y: U2) -> Self {
+            pub fn both<U1: Into<Unit<f32>>, U2: Into<Unit<f32>>>(x: U1, y: U2) -> Self {
                 #name ::xy(x, y)
             }
             
@@ -187,14 +190,14 @@ pub fn size2d_derive(input: TokenStream) -> TokenStream {
             }
         }
         
-        impl Into<StyleValueRef> for #name {
+        impl Into<StyleValue> for #name {
             /// TODO
-            fn into(self) -> StyleValueRef {
-                StyleValueRef::#name(self)
+            fn into(self) -> StyleValue {
+                StyleValue::#name(self)
             }
         }
         
-        impl StyleValue for #name {
+        impl Style for #name {
             //..
         }
     };
@@ -203,7 +206,7 @@ pub fn size2d_derive(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_derive(Color)]
-pub fn color_derive(input: TokenStream) -> TokenStream {
+pub fn derive_color(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
 
     // Extract the name of the struct
@@ -239,15 +242,15 @@ pub fn color_derive(input: TokenStream) -> TokenStream {
         }
 
         #[automatically_derived]
-        impl Into<StyleValueRef> for #name {
+        impl Into<StyleValue> for #name {
             /// TODO
-            fn into(self) -> StyleValueRef {
-                StyleValueRef::#name(self)
+            fn into(self) -> StyleValue {
+                StyleValue::#name(self)
             }
         }
 
         #[automatically_derived]
-        impl StyleValue for #name {
+        impl Style for #name {
             //..
         }
     };

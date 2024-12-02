@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 // Required for Slate's custom allocation feature.
 // TODO: Remove this.
 #![feature(allocator_api)]

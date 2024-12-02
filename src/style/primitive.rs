@@ -71,7 +71,7 @@ where
 }
 
 /// TODO
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Copy, Clone, Debug, PartialEq)]
 pub struct Size2d<P = f32>(pub(crate) Unit<P>, pub(crate) Unit<P>)
 where
     P: Display + Debug + PartialEq;
@@ -97,18 +97,23 @@ where
 }
 
 /// TODO
-#[derive(Default, Clone, Debug, PartialEq)]
+#[derive(Default, Copy, Clone, Debug, PartialEq)]
 pub struct Rect<P = f32>(pub(crate) Unit<P>, pub(crate) Unit<P>, pub(crate) Unit<P>, pub(crate) Unit<P>)
 where
     P: Display + Debug + PartialEq;
 
 impl<P> Rect<P>
 where
-    P: Display + Debug + PartialEq,
+    P: Copy + Display + Debug + PartialEq,
 {
     /// TODO
     pub fn all<U1: Into<Unit<P>>, U2: Into<Unit<P>>, U3: Into<Unit<P>>, U4: Into<Unit<P>>>(top: U1, right: U2, bottom: U3, left: U4) -> Self {
         Rect(top.into(), right.into(), bottom.into(), left.into())
+    }
+    
+    /// TODO
+    pub fn xy<U1: Into<Unit<P>> + Copy, U2: Into<Unit<P>> + Copy>(x: U1, y: U2) -> Self {
+        Rect(x.into(), y.into(), x.into(), y.into())
     }
 }
 
@@ -138,7 +143,7 @@ where
 }
 
 /// Represents a color in various formats.
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Copy, Clone, Debug, PartialEq)]
 pub enum Color {
     /// RGBA color format.
     Rgba(u8, u8, u8, u8),

@@ -5,11 +5,13 @@ edition = "2021"
 
 [features]
 default = []
-dev = ["bevy/dynamic_linking", "slate/dev"]
+dev = ["slate/dev"]
 debug = ["slate/debug"]
 verbose = ["slate/verbose"]
 inspect = ["slate/inspect"]
 profiling = ["tracy-client", "slate/profiling"]
+# dylink = ["bevy/dynamic_linking"]
+terminal = ["dep:ratatui", "dep:crossterm"]
 
 #---
 [[example]]
@@ -17,20 +19,48 @@ name = "bevy-slate-basic"
 path = "examples/basic.rs"
 
 #---
+[[example]]
+name = "bevy-slate-overlay"
+path = "examples/overlay.rs"
+
+#---
 [dependencies]
-bevy = { version = "0.13" }
-smallvec = "1.11"
-tracing = "0.1"
+uuid = { version = "1.10", features = ["v4", "v5", "serde", "zerocopy"] }
+smallvec = { version = "1.11" }
+tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.3.18", features = ["tracing", "env-filter"] }
 tracy-client = { version = "0.17", features = ["enable"], optional = true }
+crossbeam-channel = { version = "0.5" }
+raw-window-handle = { version = "0.6", features = ["alloc", "wasm-bindgen"] }
+dpi = { version = "0.1" }
+
+[dependencies.bevy]
+version = "0.14"
+features = [
+    # TODO
+]
+
+[dependencies.webview2]
+version = "0.1"
+
+[dependencies.ratatui]
+version = "*"
+optional = true
+
+[dependencies.crossterm]
+version = "*"
+optional = true
 
 [dependencies.slate]
 path = "../../"
 
+[dependencies.chizel]
+path = "../../macros/chizel"
+
+[dependencies.oops]
+git = "https://github.com/open-dx/oops-rs"
+
 #--
 [dev-dependencies]
 anyhow = "1.0.75"
-log = "0.4.20"
-
-[dev-dependencies.chizel]
-path = "../../macros/chizel"
+winapi = "0.3.9"

@@ -7,24 +7,34 @@ use slate::element::tests::ElementTestImpl;
 use slate::event::ClickEvent;
 
 //--
+/// A wimple example which builds a Scaffold from basic UIx markup.
+/// Hint: Use with `cargo expand` to view generated composition code.
+/// Example: cargo expand [-p slate] --example slate-bones
 fn main() -> Result<ExitCode> {
-    let interactive_ui = Scaffold::try_from_draw_fn({
-        let on_click_fn = |_: &ClickEvent| {
-            println!("Clicked!");
-        };
-        
-        chizel::uix! {
-            #[style(BackgroundColor::hex("#ff0000"))]
-            #[on(Click, on_click_fn)]
-            <ElementTestImpl name="Outer">
-                <ElementTestImpl name="Inner" />
-            </ElementTestImpl>
+    slate::log::init("trace");
+    
+    #[cfg(feature = "bump")]
+    let arena = slate::arena::get();
+    
+    let scaffold = Scaffold::try_from_draw_fn(
+        #[cfg(feature = "bump")]
+        arena.as_bump(),
+        {
+            let on_click_fn = |_: &ClickEvent| {
+                println!("Clicked!");
+            };
+            
+            chizel::uix! {
+                #[style(BackgroundColor::hex("#ff0000"))]
+                #[on(Click, on_click_fn)]
+                <ElementTestImpl name="Outer">
+                    <ElementTestImpl name="Inner" />
+                </ElementTestImpl>
+            }
         }
-    })?;
+    )?;
     
     // #[cfg(feature = "inspect")]
-    println!("{:#?}", interactive_ui);
-    
-    println!("Hint: `cargo expand [-p slate] --example slate-bones` ..");
+    tracing::info!("\n{:#?}", scaffold);
     Ok(ExitCode::SUCCESS)
 }

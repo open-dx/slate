@@ -1,0 +1,57 @@
+[package]
+name = "slate-surface"
+version = "0.1.0"
+edition = "2021"
+
+build = "scripts/build.rs"
+
+[features]
+default = ["bump"]
+dev = ["slate/dev", "bevy-slate/dev", "bevy/file_watcher"]
+debug = ["slate/debug", "bevy-slate/debug"]
+verbose = ["slate/verbose", "bevy-slate/verbose"]
+bump = ["slate/bump"]
+terminal = ["bevy-slate/terminal"]
+
+#--
+[dependencies]
+smallvec = { version = "1.11" }
+tracing = { version = "0.1", features = ["async-await"] }
+tracing-subscriber = { version = "0.3" }
+muda = { version = "0.15" }
+# crossterm = { version = "0.28" }
+# ratatui = { version = "0.28" }
+
+[dependencies.bevy]
+version = "0.14"
+
+[dependencies.tokio]
+version = "1.41"
+default-features = false
+features = [
+    "macros", "tokio-macros",
+    "rt", "rt-multi-thread",
+    "signal", "signal-hook-registry",
+    "sync", "time"
+]
+
+[dependencies.oops]
+git = "https://github.com/open-dx/oops-rs"
+
+[dependencies.cwrap]
+git = "https://github.com/open-dx/cwrap-rs"
+
+[dependencies.slate]
+path = "../../"
+
+[dependencies.bevy-slate]
+path = "../../runtimes/bevy"
+
+[dependencies.chizel]
+path = "../../macros/chizel"
+
+# [dependencies.ethos]
+# path = "../../../ethos"
+
+[dependencies.atlas]
+path = "../../../atlas"

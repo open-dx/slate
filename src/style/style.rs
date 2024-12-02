@@ -1,128 +1,225 @@
+use core::alloc::Allocator;
+use core::marker::PhantomData;
 use core::any::TypeId;
 use core::fmt::Debug;
 // use core::fmt::Display;
 
+use alloc::alloc::Global;
 use alloc::vec::Vec;
-// use alloc::format;
+
+#[cfg(feature = "bump")]
+use bumpalo::Bump;
+#[cfg(feature = "bump")]
+use bumpalo_herd::{Herd, Member};
 
 use enum_dispatch::enum_dispatch;
 
-use chalk::StyleProperty;
-// use tracing::Value;
-// use chalk::Unit;
-
-use crate::x::HashMap;
+use crate::collections::HashMap;
+use crate::collections::Drain;
 
 use crate::style::property::*;
 
 //---
 /// TODO
 // #[derive(Debug)]
-pub struct StyleSheet {
+#[cfg(not(feature = "bump"))]
+#[derive(Debug)]
+pub struct StyleSheet<'ctx> {
     /// TODO
-    styles: HashMap<TypeId, Vec<StyleValueRef>>,
+    styles: HashMap<TypeId, Vec<StyleValue>>,
+    
+    /// TODO
+    marker: PhantomData<&'ctx ()>
 }
 
-impl core::fmt::Debug for StyleSheet {
-    /// TODO
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let mut struct_fmt = f.debug_struct("StyleSheet");
-        
-        for (type_id, style_values) in &self.styles {
-            let type_name = StylePropertyName::get(type_id).unwrap_or("Unknown");
-            struct_fmt.field(type_name, style_values);
-        }
-        
-        struct_fmt.finish()
-    }
-}
-
-impl StyleSheet {
+#[cfg(not(feature = "bump"))]
+impl<'ctx> StyleSheet<'ctx> {
     /// TODO
     pub fn new() -> Self {
         StyleSheet {
             styles: HashMap::new(),
+            marker: PhantomData,
         }
     }
 }
 
-impl StyleSheet {
+/// TODO
+// #[derive(Debug)]
+#[cfg(feature = "bump")]
+#[derive(Debug)]
+pub struct StyleSheet<'ctx> {
     /// TODO
-    pub fn get<P: StyleValue + 'static>(&self) -> Option<&Vec<StyleValueRef>> {
+    styles: HashMap<TypeId, Vec<StyleValue, &'ctx Bump>, &'ctx Bump>,
+    
+    arena: &'ctx Bump,
+}
+
+#[cfg(feature = "bump")]
+impl<'ctx> StyleSheet<'ctx> {
+    /// TODO
+    pub fn new_in(arena: &'ctx Bump) -> Self {
+        StyleSheet {
+            styles: HashMap::new_in(arena),
+            arena,
+        }
+    }
+}
+
+// impl core::fmt::Debug for StyleSheet<'_> {
+//     /// TODO
+//     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+//         let mut struct_fmt = f.debug_struct("StyleSheet");
+//         struct_fmt.finish()
+//     }
+// }
+
+#[cfg(not(feature = "bump"))]
+impl<'ctx> StyleSheet<'ctx> {
+    /// TODO
+    pub fn get<P: Style + 'static>(&self) -> Option<&Vec<StyleValue>> {
         let type_id = TypeId::of::<P>();
         self.styles.get(&type_id)
     }
     
     /// TODO
-    pub fn styles(&self) -> &HashMap<TypeId, Vec<StyleValueRef>> {
+    pub fn styles(&self) -> &HashMap<TypeId, Vec<StyleValue>> {
         &self.styles
     }
-}
-
-impl StyleSheet {
+    
     /// TODO
-    pub fn push<P: StyleValue + 'static>(&mut self, value: P) {
+    pub fn push<P: Style + 'static>(&mut self, value: P) {
         let type_id = TypeId::of::<P>();
-        self.styles.entry(type_id).or_insert_with(Vec::new).push(value.into());
+        self.styles.entry(type_id)
+            .or_insert_with(|| Vec::new())
+            .push(value.into());
     }
     
     // Method to append styles from another StyleSheet
-    pub fn append(&mut self, other: &mut StyleSheet) {
+    pub fn append(&mut self, other: &mut StyleSheet<'ctx>) {
         for (type_id, mut values) in other.styles.drain() {
-            self.styles.entry(type_id).or_insert_with(Vec::new).append(&mut values);
+            self.styles.entry(type_id)
+                .or_insert_with(|| Vec::new())
+                .append(&mut values);
         }
     }
 }
 
-pub struct StylePropertyName(TypeId, &'static str);
-
-static STYLE_PROPERTY_NAMES: [StylePropertyName; 16] = [
-    StylePropertyName(TypeId::of::<Flex>(), "Flex"),
-    StylePropertyName(TypeId::of::<FlexGrow>(), "FlexGrow"),
-    StylePropertyName(TypeId::of::<FlexDirection>(), "FlexDirection"),
-    StylePropertyName(TypeId::of::<BackgroundColor>(), "BackgroundColor"),
-    StylePropertyName(TypeId::of::<Margin>(), "Margin"),
-    StylePropertyName(TypeId::of::<Padding>(), "Padding"),
-    StylePropertyName(TypeId::of::<BoxSize>(), "BoxSize"),
-    StylePropertyName(TypeId::of::<Width>(), "Width"),
-    StylePropertyName(TypeId::of::<Height>(), "Height"),
-    StylePropertyName(TypeId::of::<MinWidth>(), "MinWidth"),
-    StylePropertyName(TypeId::of::<MinHeight>(), "MinHeight"),
-    StylePropertyName(TypeId::of::<MaxWidth>(), "MaxWidth"),
-    StylePropertyName(TypeId::of::<MaxHeight>(), "MaxHeight"),
-    StylePropertyName(TypeId::of::<Gap>(), "Gap"),
-    StylePropertyName(TypeId::of::<BorderWeight>(), "BorderWeight"),
-    StylePropertyName(TypeId::of::<BorderColor>(), "BorderColor"),
-];
-
-impl StylePropertyName {
+#[cfg(feature = "bump")]
+impl<'ctx> StyleSheet<'ctx> {
     /// TODO
-    pub fn get(type_id: &TypeId) -> Option<&'static str> {
-        STYLE_PROPERTY_NAMES.iter()
-            // Find the property that matches `type_id` ..
-            .find(|StylePropertyName(id, _)| id == type_id)
-            // Return the found property name.
-            .map(|StylePropertyName(_, name)| *name)
+    pub fn get<P: Style + 'static>(&self) -> Option<&Vec<StyleValue, &Bump>> {
+        let type_id = TypeId::of::<P>();
+        self.styles.get(&type_id)
+    }
+    
+    /// TODO
+    pub fn styles(&self) -> &HashMap<TypeId, Vec<StyleValue, &Bump>, &Bump> {
+        &self.styles
+    }
+    
+    /// TODO
+    pub fn push<P: Style + 'static>(&mut self, value: P) {
+        let type_id = TypeId::of::<P>();
+        self.styles.entry(type_id)
+            .or_insert_with(|| Vec::new_in(self.arena))
+            .push(value.into());
+    }
+    
+    // Method to append styles from another StyleSheet
+    pub fn append(&mut self, other: &mut StyleSheet<'ctx>) {
+        for (type_id, mut values) in other.styles.drain() {
+            self.styles.entry(type_id)
+                .or_insert_with(|| Vec::new_in(self.arena))
+                .append(&mut values);
+        }
+    }
+    
+    pub fn drain(&mut self) -> Drain<'ctx, TypeId, Vec<StyleValue, &Bump>, &Bump> {
+        self.styles.drain()
     }
 }
 
+//---
 /// TODO
-pub trait StyleValue: Debug + PartialEq + Into<StyleValueRef> {
-    //..
+// #[derive(Debug)]
+#[derive(Debug)]
+pub struct StyleSheet2<'ctx> {
+    /// TODO
+    styles: HashMap<TypeId, Vec<StyleValue>>,
+    
+    context: PhantomData<&'ctx ()>,
+}
+
+impl StyleSheet2<'_> {
+    /// TODO
+    pub fn new() -> Self {
+        StyleSheet2 {
+            styles: HashMap::new(),
+            context: PhantomData,
+        }
+    }
+}
+
+impl<'ctx> StyleSheet2<'ctx> {
+    /// TODO
+    pub fn get<P: Style + 'static>(&self) -> Option<&Vec<StyleValue>> {
+        let type_id = TypeId::of::<P>();
+        self.styles.get(&type_id)
+    }
+    
+    /// TODO
+    pub fn styles(&self) -> &HashMap<TypeId, Vec<StyleValue>> {
+        &self.styles
+    }
+}
+
+impl<'ctx> StyleSheet2<'ctx> {
+    /// TODO
+    pub fn push<P: Style + 'static>(&mut self, value: P) {
+        let type_id = TypeId::of::<P>();
+        self.styles.entry(type_id)
+            .or_insert_with(|| Vec::new())
+            .push(value.into());
+    }
+    
+    // Method to append styles from another StyleSheet
+    pub fn append(&mut self, other: &mut StyleSheet2) {
+        for (type_id, mut values) in other.styles.drain() {
+            self.styles.entry(type_id)
+                .or_insert_with(|| Vec::new())
+                .append(&mut values);
+        }
+    }
+    
+    pub fn extend<'src>(&mut self, src_styles: &StyleSheet<'src>) {
+        let mut out_styles = HashMap::with_capacity_in(src_styles.styles.len(), Global);
+        
+        for (type_id, styles) in src_styles.styles.iter() {
+            out_styles.insert(*type_id, styles.to_vec_in(Global));
+        }
+        
+        self.styles.extend(out_styles)
+    }
+    
+    pub fn drain(&mut self) -> Drain<'_, TypeId, Vec<StyleValue>> {
+        self.styles.drain()
+    }
 }
 
 /// Provides (faster?) dynamic dispatch for the StyleValue (via `enum_dispatch`).
 /// 
 /// Represents a handle to a StyleValue with a few extra features:
 /// 1. TODO
-#[derive(StyleProperty, PartialEq)]
+#[derive(chalk::StyleProperty, Clone, PartialEq)]
 #[enum_dispatch(StyleValue)]
-pub enum StyleValueRef {
+pub enum StyleValue {
     Flex(Flex),
     FlexBasis(FlexBasis),
     FlexDirection(FlexDirection),
     FlexGrow(FlexGrow),
     FlexShrink(FlexShrink),
+    AlignItems(AlignItems),
+    JustifyContent(JustifyContent),
     Gap(Gap),
     BackgroundColor(BackgroundColor),
     Margin(Margin),
@@ -134,32 +231,159 @@ pub enum StyleValueRef {
     MinHeight(MinHeight),
     MaxWidth(MaxWidth),
     MaxHeight(MaxHeight),
+    ContentColor(ContentColor),
     BorderWeight(BorderWeight),
+    BorderRadius(BorderRadius),
     BorderColor(BorderColor),
 }
 
+/// TODO
+pub trait Style: Debug + PartialEq + Into<StyleValue> {
+    //..
+}
+
 #[automatically_derived]
-impl core::fmt::Debug for StyleValueRef {
+impl core::fmt::Debug for StyleValue {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            StyleValueRef::Flex(value) => write!(f, "{:?}", value),
-            StyleValueRef::FlexBasis(value) => write!(f, "{:?}", value),
-            StyleValueRef::FlexDirection(value) => write!(f, "{:?}", value),
-            StyleValueRef::FlexGrow(value) => write!(f, "{:?}", value),
-            StyleValueRef::FlexShrink(value) => write!(f, "{:?}", value),
-            StyleValueRef::Gap(value) => write!(f, "{:?}", value),
-            StyleValueRef::BackgroundColor(value) => write!(f, "{:?}", value),
-            StyleValueRef::Margin(value) => write!(f, "{:?}", value),
-            StyleValueRef::Padding(value) => write!(f, "{:?}", value),
-            StyleValueRef::BoxSize(value) => write!(f, "{:?}", value),
-            StyleValueRef::Width(value) => write!(f, "{:?}", value),
-            StyleValueRef::Height(value) => write!(f, "{:?}", value),
-            StyleValueRef::MinWidth(value) => write!(f, "{:?}", value),
-            StyleValueRef::MinHeight(value) => write!(f, "{:?}", value),
-            StyleValueRef::MaxWidth(value) => write!(f, "{:?}", value),
-            StyleValueRef::MaxHeight(value) => write!(f, "{:?}", value),
-            StyleValueRef::BorderWeight(value) => write!(f, "{:?}", value),
-            StyleValueRef::BorderColor(value) => write!(f, "{:?}", value),
+            StyleValue::Flex(value) => write!(f, "{:?}", value),
+            StyleValue::FlexBasis(value) => write!(f, "{:?}", value),
+            StyleValue::FlexDirection(value) => write!(f, "{:?}", value),
+            StyleValue::FlexGrow(value) => write!(f, "{:?}", value),
+            StyleValue::FlexShrink(value) => write!(f, "{:?}", value),
+            StyleValue::AlignItems(value) => write!(f, "{:?}", value),
+            StyleValue::JustifyContent(value) => write!(f, "{:?}", value),
+            StyleValue::Gap(value) => write!(f, "{:?}", value),
+            StyleValue::BackgroundColor(value) => write!(f, "{:?}", value),
+            StyleValue::Margin(value) => write!(f, "{:?}", value),
+            StyleValue::Padding(value) => write!(f, "{:?}", value),
+            StyleValue::BoxSize(value) => write!(f, "{:?}", value),
+            StyleValue::Width(value) => write!(f, "{:?}", value),
+            StyleValue::Height(value) => write!(f, "{:?}", value),
+            StyleValue::MinWidth(value) => write!(f, "{:?}", value),
+            StyleValue::MinHeight(value) => write!(f, "{:?}", value),
+            StyleValue::MaxWidth(value) => write!(f, "{:?}", value),
+            StyleValue::MaxHeight(value) => write!(f, "{:?}", value),
+            StyleValue::ContentColor(value) => write!(f, "{:?}", value),
+            StyleValue::BorderWeight(value) => write!(f, "{:?}", value),
+            StyleValue::BorderRadius(value) => write!(f, "{:?}", value),
+            StyleValue::BorderColor(value) => write!(f, "{:?}", value),
         }
     }
 }
+
+// #[derive(chalk::StyleProperty, PartialEq)]
+// #[enum_dispatch(StyleValue)]
+// pub enum Style {
+//     // Display & Box Model
+//     Display(Display),
+//     Position(Position),
+//     Top(Top),
+//     Right(Right),
+//     Bottom(Bottom),
+//     Left(Left),
+//     ZIndex(ZIndex),
+//     Overflow(Overflow),
+//     OverflowX(OverflowX),
+//     OverflowY(OverflowY),
+//     BoxSizing(BoxSizing),
+    
+//     // Flexbox
+//     Flex(Flex),
+//     FlexBasis(FlexBasis),
+//     FlexDirection(FlexDirection),
+//     FlexGrow(FlexGrow),
+//     FlexShrink(FlexShrink),
+//     FlexWrap(FlexWrap),
+//     Order(Order),
+//     AlignItems(AlignItems),
+//     AlignSelf(AlignSelf),
+//     JustifyContent(JustifyContent),
+    
+//     // Grid Layout
+//     GridTemplateColumns(GridTemplateColumns),
+//     GridTemplateRows(GridTemplateRows),
+//     GridColumnGap(GridColumnGap),
+//     GridRowGap(GridRowGap),
+//     GridTemplateAreas(GridTemplateAreas),
+//     GridAutoColumns(GridAutoColumns),
+//     GridAutoRows(GridAutoRows),
+//     GridAutoFlow(GridAutoFlow),
+//     GridColumn(GridColumn),
+//     GridRow(GridRow),
+//     GridArea(GridArea),
+    
+//     // Sizing
+//     Width(Width),
+//     Height(Height),
+//     MinWidth(MinWidth),
+//     MinHeight(MinHeight),
+//     MaxWidth(MaxWidth),
+//     MaxHeight(MaxHeight),
+//     BoxSize(BoxSize),
+//     AspectRatio(AspectRatio),
+
+//     // Spacing
+//     Margin(Margin),
+//     Padding(Padding),
+//     Gap(Gap),
+
+//     // Borders
+//     BorderStyle(BorderStyle),
+//     BorderWeight(BorderWeight),
+//     BorderRadius(BorderRadius),
+//     BorderColor(BorderColor),
+//     Border(Border),
+//     BorderTop(BorderTop),
+//     BorderRight(BorderRight),
+//     BorderBottom(BorderBottom),
+//     BorderLeft(BorderLeft),
+
+//     // Backgrounds
+//     BackgroundColor(BackgroundColor),
+//     BackgroundImage(BackgroundImage),
+//     BackgroundPosition(BackgroundPosition),
+//     BackgroundRepeat(BackgroundRepeat),
+//     BackgroundSize(BackgroundSize),
+//     BackgroundAttachment(BackgroundAttachment),
+    
+//     // Typography
+//     FontFamily(FontFamily),
+//     FontSize(FontSize),
+//     FontStyle(FontStyle),
+//     FontWeight(FontWeight),
+//     LineHeight(LineHeight),
+//     TextAlign(TextAlign),
+//     TextDecoration(TextDecoration),
+//     TextTransform(TextTransform),
+//     LetterSpacing(LetterSpacing),
+//     WordSpacing(WordSpacing),
+//     WhiteSpace(WhiteSpace),
+    
+//     // Effects
+//     Opacity(Opacity),
+//     BoxShadow(BoxShadow),
+//     TextShadow(TextShadow),
+//     Filter(Filter),
+//     ClipPath(ClipPath),
+    
+//     // Transitions & Animations
+//     Transition(Transition),
+//     TransitionDuration(TransitionDuration),
+//     TransitionTimingFunction(TransitionTimingFunction),
+//     TransitionDelay(TransitionDelay),
+//     Transform(Transform),
+//     TransformOrigin(TransformOrigin),
+//     Animation(Animation),
+//     AnimationName(AnimationName),
+//     AnimationDuration(AnimationDuration),
+//     AnimationTimingFunction(AnimationTimingFunction),
+//     AnimationDelay(AnimationDelay),
+//     AnimationIterationCount(AnimationIterationCount),
+//     AnimationDirection(AnimationDirection),
+
+//     // Miscellaneous
+//     ContentColor(ContentColor),
+//     Visibility(Visibility),
+//     Cursor(Cursor),
+// }

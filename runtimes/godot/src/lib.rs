@@ -10,15 +10,15 @@ unsafe impl ExtensionLibrary for GodotSlate {
 }
 
 //---
-use godot::engine::Sprite2D;
-use godot::engine::ISprite2D;
+use godot::classes::Sprite2D;
+use godot::classes::ISprite2D;
 
 /// TODO
 #[derive(GodotClass)]
 #[class(base=Sprite2D)]
 struct Player {
-    speed: f64,
-    angular_speed: f64,
+    _speed: f64,
+    _angular_speed: f64,
     
     #[base]
     sprite: Base<Sprite2D>
@@ -31,18 +31,18 @@ impl ISprite2D for Player {
         godot_print!("Hello, world!"); // Prints to the Godot console
         
         Self {
-            speed: 400.0,
-            angular_speed: std::f64::consts::PI,
+            _speed: 400.0,
+            _angular_speed: std::f64::consts::PI,
             sprite
         }
     }
     
-    fn physics_process(&mut self, delta: f64) {
-        self.sprite.rotate((self.angular_speed * delta) as f32);
+    fn physics_process(&mut self, _delta: f64) {
+        // self.sprite.rotate((self.angular_speed * _delta) as f32);
         
-        let rotation = self.sprite.rotation();
-        let velocity = Vector2::UP.rotated(rotation) * self.speed as f32;
-        self.sprite.translate(velocity * delta as f32);
+        // let rotation = self.sprite.rotation();
+        // let velocity = Vector2::UP.rotated(rotation) * self.speed as f32;
+        // self.sprite.translate(velocity * _delta as f32);
     }
 }
 
