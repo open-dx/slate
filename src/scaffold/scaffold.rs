@@ -1,20 +1,18 @@
+use core::alloc::Layout;
 // use core::borrow::Borrow;
 use core::hash::Hash;
 use core::hash::Hasher;
 
+use alloc::alloc::alloc;
+use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use ahash::AHasher;
 
-// use crate::surface::Surface;
-// use crate::surface::SurfaceError;
-// use crate::scaffold::Scaffold;
-// use crate::scaffold::ScaffoldError;
 use crate::element::Element;
 use crate::element::ElementError;
 use crate::element::ElementNode;
-use crate::element::Renderable;
 // use crate::element::DrawFn;
 use crate::element::UUID;
 use crate::event::Event;
@@ -22,8 +20,12 @@ use crate::event::EventKind;
 use crate::event::EventHandlerFn;
 use crate::style::StyleSheet;
 // use crate::style::StyleProperty;
-use crate::style::StyleValue;
+use crate::style::Style;
 // use crate::xtra::HashMap;
+
+
+#[cfg(feature = "bump")]
+use crate::arena::Bump;
 
 //---
 /// A lightweight single-pass builder for a tree of Element nodes.
@@ -43,32 +45,54 @@ use crate::style::StyleValue;
 /// // TODO: etc..
 /// ```
 #[derive(Debug)]
-pub struct Scaffold {
+pub struct Scaffold<'arena> {
     /// The node currently being built.
-    element: Option<Box<dyn Element + 'static>>,
+    element: Option<(&'arena dyn Element, Layout)>,
+    
+    /// The node currently being built.
+    #[cfg(not(feature = "bump"))]
+    element: Option<(Box<dyn Element + 'arena>, Layout)>,
     
     /// The built stylesheet for this node.
-    stylesheet: Option<StyleSheet>,
+    stylesheet: StyleSheet<'arena>,
     
     /// TODO
+    content: Option<alloc::string::String>,
+    
+    /// TODO
+    #[cfg(feature = "bump")]
+    slots: Vec<(), &'arena Bump>,
+    
+    /// TODO
+    #[cfg(not(feature = "bump"))]
     slots: Vec<()>,
     
     /// TODO
-    children: Vec<Scaffold>,
+    #[cfg(feature = "bump")]
+    children: Vec<Scaffold<'arena>, &'arena Bump>,
+    
+    /// TODO
+    #[cfg(not(feature = "bump"))]
+    children: Vec<Scaffold<'arena>>,
     
     /// The state of the hash after the last calculation.
     hash: Option<u64>,
     
     /// Hash of the element's internal state.
     hasher: AHasher,
+    
+    /// TODO
+    #[cfg(feature = "bump")]
+    arena: &'arena Bump,
 }
 
-impl Scaffold {
-    /// Create a new Scaffold from a given Element.
+impl<'arena> Scaffold<'arena> {
+    #[cfg(not(feature = "bump"))]
     pub fn new() -> Self {
         Scaffold {
             element: None,
-            stylesheet: None,
+            stylesheet: StyleSheet::new(),
+            content: None,
             slots: Vec::new(),
             children: Vec::new(),
             hasher: AHasher::default(),
@@ -76,9 +100,38 @@ impl Scaffold {
         }
     }
     
+    /// Create a new Scaffold from a given Element.
+    #[cfg(feature = "bump")]
+    pub fn new_in(arena: &'arena Bump) -> Self {
+        Scaffold {
+            element: None,
+            stylesheet: StyleSheet::new_in(arena),
+            content: None,
+            slots: Vec::new_in(arena),
+            children: Vec::new_in(arena),
+            hasher: AHasher::default(),
+            hash: None,
+            arena,
+        }
+    }
+    
     /// TODO
-    pub fn with_element(mut self, element: impl Element + 'static) -> Self {
-        self.element = Some(Box::new(element));
+    #[cfg(feature = "bump")]
+    pub fn with_element<E: Element + Hash + 'arena>(mut self, mut element: E) -> Self {
+        let element = self.arena.alloc(element);
+        element.hash(&mut self.hasher);
+        
+        self.element = Some((element, Layout::new::<E>()));
+        self // etc..
+    }
+    
+    /// TODO
+    #[cfg(not(feature = "bump"))]
+    pub fn with_element<E: Element + Hash + 'arena>(mut self, mut element: E) -> Self {
+        let element = Box::new(element);
+        element.hash(&mut self.hasher);
+        
+        self.element = Some((element, Layout::new::<E>()));
         self // etc..
     }
     
@@ -93,58 +146,100 @@ impl Scaffold {
     }
 }
 
-impl Scaffold {
+impl<'arena> Scaffold<'arena> {
     /// Provides immutable access to the element node of this Scaffold.
-    pub fn get_element(&self) -> Option<&Box<dyn Element + 'static>> {
-        self.element.as_ref()
+    #[cfg(feature = "bump")]
+    pub fn get_element(&self) -> Option<&dyn Element> {
+        self.element.map(|element| element.0)
     }
     
     /// Provides immutable access to the element node of this Scaffold.
-    pub fn get_element_mut(&mut self) -> Option<&mut Box<dyn Element + 'static>> {
-        self.element.as_mut()
+    #[cfg(not(feature = "bump"))]
+    pub fn get_element(&self) -> Option<&dyn Element> {
+        self.element.as_ref().map(|element| &*element.0)
+    }
+    
+    // /// Provides immutable access to the element node of this Scaffold.
+    // pub fn get_element_mut(&mut self) -> Option<&mut dyn Element> {
+    //     self.element.as_mut().map(|e| *e)
+    // }
+    
+    /// TODO
+    pub fn take_element_boxed(&mut self) -> Option<Box<dyn Element>> {
+        self.element.take().and_then(|(element, layout)| {
+            unsafe {
+                type DynPtr = (*mut u8, *const ());
+                let (src_data_ptr, vtable_ptr): DynPtr = core::mem::transmute(element);
+                
+                let box_data_ptr = alloc(layout) as *mut u8;
+                core::ptr::copy_nonoverlapping(src_data_ptr, box_data_ptr, layout.size());
+                
+                let element_ptr: *mut dyn Element = core::mem::transmute((box_data_ptr, vtable_ptr));
+                let element_box = Box::from_raw(element_ptr);
+                
+                Some(element_box)
+            }
+        })
     }
     
     /// TODO
-    pub fn take_element(&mut self) -> Option<Box<dyn Element + 'static>> {
-        self.element.take()
+    pub fn stylesheet(&self) -> &StyleSheet<'arena> {
+        &self.stylesheet
     }
     
     /// TODO
-    pub fn stylesheet_mut(&mut self) -> &mut StyleSheet {
-        self.stylesheet.get_or_insert_with(StyleSheet::new)
+    pub fn stylesheet_mut(&mut self) -> &mut StyleSheet<'arena> {
+        &mut self.stylesheet
     }
     
     /// TODO
-    pub fn get_stylesheet_mut(&mut self) -> Option<&mut StyleSheet> {
-        self.stylesheet.as_mut()
-    }
-    
-    /// TODO
-    pub fn take_stylesheet(&mut self) -> Option<StyleSheet> {
-        self.stylesheet.take()
+    pub fn content(&self) -> Option<&str> {
+        self.get_element().as_ref().and_then(|e| e.content())
     }
     
     //--
     /// Provides immutable access to the children of this Scaffold.
-    pub fn children(&self) -> &Vec<Scaffold> {
+    #[cfg(feature = "bump")]
+    pub fn children(&self) -> &Vec<Scaffold<'_>, &'arena Bump> {
+        self.children.as_ref()
+    }
+    
+    /// Provides immutable access to the children of this Scaffold.
+    #[cfg(not(feature = "bump"))]
+    pub fn children(&self) -> &Vec<Scaffold<'_>> {
         self.children.as_ref()
     }
     
     /// Provides mutable access to the children of this Scaffold.
-    pub fn children_mut(&mut self) -> &mut Vec<Scaffold> {
-        &mut self.children
+    #[cfg(feature = "bump")]
+    pub fn children_mut(&mut self) -> &mut Vec<Scaffold<'arena>, &'arena Bump> {
+        self.children.as_mut()
+    }
+    
+    /// Provides mutable access to the children of this Scaffold.
+    #[cfg(not(feature = "bump"))]
+    pub fn children_mut(&mut self) -> &mut Vec<Scaffold<'arena>> {
+        self.children.as_mut()
     }
 }
 
-impl Scaffold {
+impl<'arena> Scaffold<'arena> {
     /// TODO
-    pub fn add<E: Element + Renderable + Hash + 'static>(&mut self, element: E) -> Result<&mut Self, ScaffoldError> {
-        let mut new_scaffold = Scaffold::new();
-        element.hash(&mut new_scaffold.hasher);
-        new_scaffold.element = Some(Box::new(element));
+    pub fn add<E>(&mut self, element: E) -> Result<&mut Self, ScaffoldError>
+    where
+        E: Element + Hash + 'arena,
+    {
+        let child_idx = self.children.len() + 1;
         
-        self.children.push(new_scaffold);
-        self.children.last_mut().ok_or(ScaffoldError::CursorOutOfBounds)
+        #[cfg(feature = "bump")]
+        let child = Scaffold::new_in(self.arena).with_element(element);
+        
+        #[cfg(not(feature = "bump"))]
+        let child = Scaffold::new().with_element(element);
+        
+        self.children.push(child);
+        self.children.last_mut()
+            .ok_or(ScaffoldError::IndexOutOfBounds(child_idx))
     }
     
     /// TODO
@@ -154,14 +249,14 @@ impl Scaffold {
     }
     
     /// TODO
-    pub fn with_style_attr<V: StyleValue + core::fmt::Debug + 'static>(&mut self, style_value: V) -> Result<&mut Self, ScaffoldError> {
-        self.stylesheet_mut().push(style_value);
+    pub fn with_style_attr<V: Style + 'static>(&mut self, style_value: V) -> Result<&mut Self, ScaffoldError> {
+        self.stylesheet.push(style_value);
         Ok(self) // etc..
     }
     
     /// TODO
-    pub fn with_class_attr<F: Fn(&mut StyleSheet)>(&mut self, class_fn: F) -> Result<&mut Self, ScaffoldError> {
-        class_fn(self.stylesheet_mut());
+    pub fn with_class_attr<F: Fn(&mut StyleSheet<'arena>)>(&mut self, class_fn: F) -> Result<&mut Self, ScaffoldError> {
+        class_fn(&mut self.stylesheet);
         Ok(self) // etc..
     }
     
@@ -175,8 +270,11 @@ impl Scaffold {
     }
     
     pub fn build(&mut self) -> Result<&mut Self, ScaffoldError> {
-        let final_hash = self.hasher.finish();
-        self.hash = Some(final_hash);
+        if let Some(ref element) = self.get_element() {
+            element.draw()(self)?;
+        }
+        
+        self.hash = Some(self.hasher.finish());
         
         #[cfg(feature = "verbose")]
         tracing::debug!("Built Scaffold with Hash({:?})", self.hash);
@@ -185,10 +283,11 @@ impl Scaffold {
     }
 }
 
-impl Scaffold {
+impl<'arena> Scaffold<'arena> {
     /// TODO
     pub fn hash(&self) -> Option<u64> {
         if self.hash == None {
+            #[cfg(feature = "verbose")]
             tracing::warn!("Hash not yet built!");
         }
         self.hash
@@ -219,16 +318,26 @@ impl Scaffold {
 //     }
 // }
 
-// #[cfg(debug_assertions)]
-impl Scaffold {
+impl<'arena> Scaffold<'arena> {
     /// TODO
+    #[cfg(feature = "bump")]
+    pub fn try_from_draw_fn<F>(bump: &'arena Bump, draw_fn: F) -> Result<Self, ScaffoldError>
+    where
+        F: FnOnce(&mut Scaffold<'arena>) -> Result<(), ScaffoldError>,
+    {
+        let mut scaffold = Scaffold::new_in(bump);
+        draw_fn(&mut scaffold)?;
+        Ok(scaffold)
+    }
+    
+    /// TODO
+    #[cfg(not(feature = "bump"))]
     pub fn try_from_draw_fn<F>(draw_fn: F) -> Result<Self, ScaffoldError>
     where
         F: FnOnce(&mut Scaffold) -> Result<(), ScaffoldError>,
     {
         let mut scaffold = Scaffold::new();
         draw_fn(&mut scaffold)?;
-        // arena.
         Ok(scaffold)
     }
 }
@@ -238,7 +347,7 @@ impl Scaffold {
 pub enum ScaffoldError {
     /// An item wasn't at the expected index. This is almost always a logical
     /// error and is likely a bug in the Scaffold behavior iteself.
-    CursorOutOfBounds,
+    IndexOutOfBounds(usize),
     
     /// The hash was expected but is not available. This is almost always a
     /// programming error. It means you're trying to use a hash that hasn't
@@ -273,7 +382,7 @@ impl core::fmt::Display for ScaffoldError {
     /// TODO
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            ScaffoldError::CursorOutOfBounds => write!(f, "TerminalError::CursorOutOfBounds"),
+            ScaffoldError::IndexOutOfBounds(index) => write!(f, "TerminalError::CursorOutOfBounds: {:}", index),
             ScaffoldError::HashMissing => write!(f, "TerminalError::HashUnavailable"),
             ScaffoldError::NodeMissing(error) => write!(f, "TerminalError::NodeMissing: {:}", error),
             ScaffoldError::ElementError(error) => write!(f, "TerminalError::ElementError: {:}", error),

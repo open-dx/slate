@@ -11,6 +11,22 @@ pub enum EventKind {
 
 pub type EventHandlerFn<E> = fn(event: &E);
 
+// TODO: Remove this!
+// pub struct EventHandlerFn<F>
+// where
+//     F: Fn(),
+// {
+//     function: F,
+// }
+// impl<F> EfficientStruct<F>
+// where
+//     F: Fn(),
+// {
+//     fn call_function(&self) {
+//         (self.function)();
+//     }
+// }
+
 //---
 /// TODO: Get this from slate::events::*.
 #[derive(Debug)]

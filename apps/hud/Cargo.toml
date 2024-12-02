@@ -2,30 +2,43 @@
 name = "slate-hud"
 version = "0.1.0"
 edition = "2021"
+build = "scripts/build.rs"
 
 #--
 default-run = "slate-hud"
 
 [[bin]]
 name = "slate-hud"
-path = "src/bin/main.rs"
-required-features = ["bevy"]
+path = "src/main.rs"
+required-features = []
 
 #--
 [features]
 default = []
-bevy = ["dep:bevy", "dep:bevy-slate"]
+dev = []
+debug = []
+verbose = []
+terminal = ["bevy-slate/terminal"]
 
-#--
+#---
 [dependencies]
+anyhow = "1.0"
+tracing = "0.1.40"
+serde = { version = "1.0", features = ["std", "derive"] }
+
+[dependencies.bevy]
+version = "0.14"
+
+[dependencies.atlas]
+path = "../../../atlas"
 
 [dependencies.slate]
 path = "../../"
 
-[dependencies.bevy]
-version = "0.12"
-optional = true
-
 [dependencies.bevy-slate]
 path = "../../runtimes/bevy"
-optional = true
+
+#---
+# [target.x86_64-pc-windows-msvc]
+# linker = "rust-lld.exe"
+# rustflags = ["-Zshare-generics=off"]

@@ -4,6 +4,7 @@ use quote::ToTokens;
 use quote::quote;
 
 use syn::*;
+use syn::Meta;
 
 use syn::Attribute;
 use syn::Error;
@@ -32,24 +33,78 @@ impl ElementDeriveBuilder {
 impl ElementDeriveBuilder {
     /// TODO
     pub fn build(&self) -> TokenStream {
+        let root_ident = self.ast.ident.to_owned();
+        
         match &self.ast.data {
             // TODO
             Data::Struct(struct_element) => {
                 for _field in struct_element.fields.iter() {
-                    #[cfg(feature = "dbg")]
+                    #[cfg(feature = "debug")]
                     println!("\x1b[1;35m     Element\x1b[0;0m {:?}", _field.ident);
                     
                     //..
                 }
             }
             
-            // TODO
+            // TODO: Add support for deriving from Enums, etc ..
             _ => panic!("Element can only be derived for structs"),
+        }
+        
+        let mut render_exprs = Vec::new();
+        for attr in &self.ast.attrs {
+            match &attr.meta {
+                Meta::List(list) => {
+                    if list.path.is_ident("render") {
+                        let expr_args = list.parse_args_with(Punctuated::<Expr, Token![,]>::parse_terminated).expect("attribute arguments");
+                        if expr_args.len() < 1 || expr_args.len() > 2 {
+                            panic!("Invalid arguments.");
+                        }
+                        
+                        let mut render_expr = None;
+                        let mut render_condition = None;
+                        
+                        for expr_arg in expr_args {
+                            match expr_arg {
+                                Expr::Path(_) | Expr::Field(_) if render_expr == None => {
+                                    render_expr = Some(expr_arg);
+                                }
+                                Expr::If(arg_if) if render_expr != None && render_condition == None => {
+                                    render_condition = Some(arg_if.cond);
+                                }
+                                Expr::Path(_) => {
+                                    panic!("Path already exists!");
+                                }
+                                _ => {
+                                    panic!("Unsupported argument: {:?}", expr_arg);
+                                }
+                            }
+                        }
+                        
+                        if let Some(render_expr) = render_expr {
+                            render_exprs.push((render_expr, render_condition))
+                        }
+                    }
+                }
+                _ => {
+                    //..
+                }
+            }
         }
         
         // TODO
         TokenStream::from(quote! {
-            //..
+            #[automatically_derived]
+            impl core::fmt::Display for #root_ident {
+                /// TODO
+                fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                    f.write_str("<#root_ident>")
+                }
+            }
+
+            #[automatically_derived]
+            impl slate::element::Element for #root_ident {
+                //..
+            }
         })
     }
     
@@ -186,9 +241,8 @@ impl TryFrom<&MetaList> for ElementStyleAttribute {
     }
 }
 
-/// An event attribute, as in `#[event(Click, click_handler_fn)]`.
-/// - Slot `0` is the event name, as in `Click`.
-/// - Slot `1` is the event handler function, as in `fn click_handler_fn(..)`.
+/// A class attribute, as in `#[class(style_buiilder_fn)]`.
+/// - Slot `0` is the style builder function, as in `fn some_class_name(..)`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ElementClassAttribute(Vec<Expr>);
 

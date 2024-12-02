@@ -1,6 +1,9 @@
 use core::ops::Deref;
 use core::ops::DerefMut;
 
+use bevy::color::Color;
+use bevy::asset::AssetServer;
+use bevy::asset::Handle;
 use bevy::ecs::prelude::*;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::component::Component;
@@ -8,13 +11,12 @@ use bevy::ecs::system::Commands;
 use bevy::ecs::system::Query;
 use bevy::hierarchy::BuildChildren;
 use bevy::hierarchy::ChildBuilder;
-// use bevy::hierarchy::DespawnRecursiveExt;
+use bevy::text::Font;
+use bevy::text::TextSection;
 use bevy::ui::prelude::*;
-use bevy::ui::node_bundles::NodeBundle;
+use bevy::ui::FocusPolicy;
 
 use slate::surface::Surface;
-// use slate::surface::builder::SurfaceBuilder;
-// use slate::surface::SurfaceError;
 use slate::surface::SurfaceUpdate;
 use slate::scaffold::Scaffold;
 use slate::scaffold::ScaffoldError;
@@ -22,10 +24,10 @@ use slate::scaffold::ScaffoldError;
 use slate::element::ElementNode;
 use slate::element::DrawReport;
 use slate::element::UUID;
-use slate::style::StyleValueRef;
+use slate::style::StyleValue;
 use slate::style::primitive::Unit;
-// use slate::style::properties::BoxSize;
-use slate::x::HashMap;
+use slate::style::property::ContentColor;
+use slate::collections::HashMap;
 
 /// Convenience type for unpacking a 2D size.
 struct Size2d(Val, Val);
@@ -38,10 +40,13 @@ pub struct SurfaceProvider {
     surface: Surface<'static>,
     
     /// The entity that represents the surface in the Bevy hierarchy.
-    surface_entity: Option<Entity>,
+    root_entity: Option<Entity>,
     
     /// TODO
     entity_index: HashMap<UUID, Entity>,
+    
+    /// TODO: Make this a font asset manager.
+    font_asset: Handle<Font>,
 }
 
 /// TODO
@@ -53,17 +58,33 @@ impl SurfaceProvider {
     pub fn new() -> Self {
         SurfaceProvider {
             surface: Surface::<'static>::new(),
-            surface_entity: None,
+            root_entity: None,
             entity_index: HashMap::new(),
+            font_asset: Handle::default(),
         }
     }
     
     /// TODO
+    pub fn with_root(mut self, root: Entity) -> Self {
+        self.root_entity = Some(root);
+        self // etc..
+    }
+    
+    /// TODO
+    pub fn with_font(mut self, font: Handle<Font>) -> Self {
+        self.font_asset = font;
+        self // etc..
+    }
+}
+
+impl SurfaceProvider {
+    /// TODO
     pub fn from_surface(surface: Surface<'static>) -> Self {
         SurfaceProvider {
             surface,
-            surface_entity: None,
+            root_entity: None,
             entity_index: HashMap::new(),
+            font_asset: Handle::default(),
         }
     }
 }
@@ -117,12 +138,8 @@ impl SurfaceProvider {
     
     /// Consume updates from the surface and apply them to the Bevy hierarchy.
     fn consume_updates(&mut self, commands: &mut Commands, surface_updates: &mut Vec<SurfaceUpdate>) {
-        // Get a copy of the surface Entity so we can operate on it.
-        // TODO: In some cases, we'll want to operate on an entity determined
-        //  by which node is being updated (e.g. when updating a node's style).
-        let Some(surface_entity) = self.surface_entity else {
-            return tracing::warn!("SurfaceProvider has no entity.");
-        };
+        #[cfg(feature="verbose")]
+        tracing::trace!("Found {:?} updates ..", surface_updates.len());
         
         // Stores a list of updates that have been consumed by the system.
         // 
@@ -134,17 +151,21 @@ impl SurfaceProvider {
         // index for use in future update calls, indexing, etc.
         let mut consumed_updates = HashMap::with_capacity(surface_updates.len());
         
-        #[cfg(feature = "verbose")]
-        tracing::trace!("Found {:?} updates ..", consumed_updates.len());
-        
         // TODO: Evaluate: Sort updates by kind?
         //  1. Add
         //  2. Update
         //  3. Remove
-
+        
+        // Get a copy of the surface Entity so we can operate on it.
+        // TODO: In some cases, we'll want to operate on an entity determined
+        //  by which node is being updated (e.g. when updating a node's style).
+        let Some(root_entity) = self.root_entity else {
+            return tracing::warn!("SurfaceProvider has no entity.");
+        };
+        
         // TODO: Iterate over the vec of updates
-        for update in surface_updates.drain(..).filter(|_| true) {
-            match update {
+        for surface_update in surface_updates.drain(..).filter(|_| true) {
+            match surface_update {
                 SurfaceUpdate::Add(element_uuid) => {
                     // Ensure we're not adding a node that's already been
                     // added by a different recursive update operation.
@@ -161,7 +182,7 @@ impl SurfaceProvider {
                     //  via more direct updates?
                     if !consumed_updates.contains_key(&element_uuid) {
                         commands
-                            .entity(surface_entity)
+                            .entity(root_entity)
                             .with_children(|child_builder| {
                                 self.spawn_element_node(child_builder, &element_uuid, &mut consumed_updates);
                             });
@@ -208,35 +229,68 @@ impl SurfaceProvider {
     /// TODO
     fn spawn_element_node(&self, builder: &mut ChildBuilder, element_uuid: &UUID, consumed_updates: &mut HashMap<UUID, Entity>) {
         // Get a copy of the surface Entity so we can operate on it.
-        let Some(surface_entity) = self.surface_entity else {
+        let Some(root_entity) = self.root_entity else {
             return tracing::warn!("SurfaceProvider has no entity.");
         };
         
-        match self.surface.get_node(element_uuid) {
-            Some(element_node) => {
-                // TODO: Get the element's style from the surface.
-                let mut element_entity = builder.spawn(ElementNodeBundle::from(element_node));
-                
-                if let Some(element_children) = self.surface.get_children_of(&element_uuid) {
-                    element_entity
-                        .with_children(|child_builder| {
-                            for child_element_node in element_children.into_iter() {
-                                self.spawn_element_node(child_builder, &child_element_node.uuid(), consumed_updates);
-                            }
-                        });
-                }
-                
-                consumed_updates.insert(*element_uuid, element_entity.id());
-                
-                #[cfg(feature = "inspect")]
-                tracing::trace!("Spawned Element#{:?} at Node {:?}", element_uuid, element_entity.id());
-            }
-            None => {
-                // TODO: Handle this error visually in the tree.
-                tracing::warn!("Can't find Element {:?} for rendering.", element_uuid);
-                return;
-            }
+        let Some(element) = self.surface.get_node(element_uuid) else {
+            // TODO: Handle this error visually in the tree.
+            return tracing::warn!("Can't find Element {:?} for rendering.", element_uuid);
+        };
+        
+        // TODO: Get the element's style from the surface.
+        let mut element_node = builder.spawn(ElementNodeBundle::from(element));
+        
+        if let Some(content) = element.content() {
+            element_node
+                .with_children(|child_builder| {
+                    child_builder.spawn((
+                        TextBundle {
+                            text: bevy::text::Text {
+                                sections: vec![
+                                    TextSection {
+                                        value: String::from(content),
+                                        style: bevy::text::TextStyle {
+                                            font: self.font_asset.clone(),
+                                            font_size: 12.0,
+                                            color: Color::srgba(200., 200., 200., 1.),
+                                        }
+                                    },
+                                ],
+                                justify: bevy::text::JustifyText::Left,
+                                linebreak_behavior: bevy::text::BreakLineOn::WordBoundary,
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        },
+                        // TODO: Upgrade to Bevy 0.15 ..
+                        // Node::default(),
+                        // Text::new(content),
+                        // TextColor(bevy::color::Color::srgb(0.8, 0.8, 0.8)),
+                        // bevy::prelude::TextFont {
+                        //     font: self.font_asset.clone(),
+                        //     font_size: 12.0,
+                        //     ..Default::default()
+                        // },
+                        // TextLayout::new_with_justify(JustifyText::Center),
+                        // AnimatedText,
+                    ));
+                });
         }
+        
+        if let Some(element_children) = self.surface.get_children_of(&element_uuid) {
+            element_node
+                .with_children(|child_builder| {
+                    for child_element_node in element_children.into_iter() {
+                        self.spawn_element_node(child_builder, &child_element_node.uuid(), consumed_updates);
+                    }
+                });
+        }
+        
+        consumed_updates.insert(*element_uuid, element_node.id());
+        
+        #[cfg(feature = "inspect")]
+        tracing::trace!("Spawned Element#{:?} at Node {:?}", element_uuid, element_entity.id());
     }
     
     fn update_element_node(&self, commands: &mut Commands, element_uuid: &UUID, element_entity: Entity) {
@@ -248,8 +302,8 @@ impl SurfaceProvider {
             }
             
             None => {
-                tracing::warn!("Attempting to update untracked node {:?}; Skipping ..", element_uuid);
-                return; // TODO: Pass the error off to a diagnostic report.
+                return tracing::warn!("Attempting to update untracked node {:?}; Skipping ..", element_uuid);
+                // TODO: Pass the error off to a diagnostic report.
             }
         }
     }
@@ -259,18 +313,19 @@ impl SurfaceProvider {
 #[derive(Bundle)]
 pub struct SurfaceNodeBundle {
     /// TODO
-    node_bundle: NodeBundle,
+    node: NodeBundle,
 }
 
 impl From<&Surface<'_>> for SurfaceNodeBundle {
     /// TODO
     fn from(_surface_ref: &Surface<'_>) -> Self {
         SurfaceNodeBundle {
-            node_bundle: NodeBundle {
+            node: NodeBundle {
                 style: Style {
+                    // display: Display::None,
                     flex_direction: FlexDirection::Column,
-                    // flex_grow: 0.,
-                    // flex_shrink: 1.,
+                    flex_grow: 0.,
+                    flex_shrink: 1.,
                     width: Val::Percent(100.),
                     height: Val::Percent(100.),
                     ..Default::default()
@@ -281,23 +336,26 @@ impl From<&Surface<'_>> for SurfaceNodeBundle {
     }
 }
 
+//---
 /// TODO
 pub(crate) fn setup_new_surface(
     mut surface_query: Query<(Entity, &mut SurfaceProvider), Added<SurfaceProvider>>,
+    asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
     for (surface_entity, mut surface_provider) in surface_query.iter_mut() {
-        let mut surface_cmd = commands.entity(surface_entity);
+        let mut surface_cmds = commands.entity(surface_entity);
         
-        surface_cmd.insert(SurfaceNodeBundle::from(surface_provider.surface()));
-        surface_provider.surface_entity = Some(surface_entity);
+        surface_cmds.insert(SurfaceNodeBundle::from(surface_provider.surface()));
+        surface_provider.root_entity = Some(surface_entity);
+        surface_provider.font_asset = asset_server.load("fonts/FiraMono-Medium.ttf");
         
         tracing::trace!("Surface `{:?}` changed ..", surface_entity);
     }
 }
 
 //---
-#[derive(Component)]
+#[derive(Component, Default)]
 pub struct ElementNodeHandle(UUID);
 
 impl ElementNodeHandle {
@@ -323,33 +381,20 @@ impl core::fmt::Debug for ElementNodeHandle {
     }
 }
 
-#[derive(Bundle)]
+#[derive(Bundle, Default)]
 pub struct ElementNodeBundle {
-    element_node_handle: ElementNodeHandle,
-    node_bundle: NodeBundle,
+    node: NodeBundle,
+    handle: ElementNodeHandle,
+    // background_color: BackgroundColor,
+    // border_color: BorderColor,
+    // border_radius: BorderRadius,
 }
 
 impl ElementNodeBundle {
     pub fn new(uuid: UUID) -> Self {
         ElementNodeBundle {
-            element_node_handle: ElementNodeHandle(uuid),
-            // node_bundle: NodeBundle::default(),
-            // TODO: Remove this default when we implement the StyleGuide.
-            node_bundle: NodeBundle {
-                style: Style {
-                    // flex_grow: 0.,
-                    // flex_shrink: 1.,
-                    // border: UiRect {
-                    //     top: Val::Px(2.),
-                    //     right: Val::Px(2.),
-                    //     bottom: Val::Px(2.),
-                    //     left: Val::Px(2.),
-                    // },
-                    ..Default::default()
-                },
-                // border_color: bevy::ui::BorderColor(bevy::render::color::Color::GRAY),
-                ..Default::default()
-            },
+            handle: ElementNodeHandle(uuid),
+            ..Default::default()
         }
     }
 }
@@ -364,7 +409,7 @@ impl From<&ElementNode<'_>> for ElementNodeBundle {
             
             for style in styles.iter() {
                 #[cfg(feature = "inspect")]
-                tracing::trace!("Processing Style: {:?}", style);
+                tracing::debug!("Processing Style: {:?}", style);
                 
                 bundle.apply_style(style);
             }
@@ -377,31 +422,47 @@ impl From<&ElementNode<'_>> for ElementNodeBundle {
 impl ElementNodeBundle {
     /// Apply a style to the ElementNodeBundle.
     #[inline(always)]
-    fn apply_style(&mut self, style_value: &StyleValueRef) {
+    fn apply_style(&mut self, style_value: &StyleValue) {
         #[allow(unreachable_patterns)]
         match style_value {
-            StyleValueRef::Flex(flex) => self.apply_flex(flex),
-            StyleValueRef::FlexDirection(flex_direction) => self.apply_flex_direction(flex_direction),
-            StyleValueRef::FlexBasis(flex_basis) => Self::apply_unit(flex_basis, &mut self.node_bundle.style.flex_basis),
-            StyleValueRef::FlexGrow(flex_grow) => Self::apply_weight(flex_grow, &mut self.node_bundle.style.flex_grow),
-            StyleValueRef::FlexShrink(flex_shrink) => Self::apply_weight(flex_shrink, &mut self.node_bundle.style.flex_shrink),
-            StyleValueRef::Gap(gap) => Self::apply_gap(gap, &mut self.node_bundle.style),
-            StyleValueRef::BackgroundColor(color) => Self::apply_background_color(color, &mut self.node_bundle.background_color),
-            StyleValueRef::Margin(margin) => Self::apply_rect(margin, &mut self.node_bundle.style.margin),
-            StyleValueRef::Padding(padding) => Self::apply_rect(padding, &mut self.node_bundle.style.padding),
-            StyleValueRef::BoxSize(box_size) => Self::apply_box_size(box_size, &mut self.node_bundle.style),
-            StyleValueRef::Width(width) => Self::apply_unit(width, &mut self.node_bundle.style.width),
-            StyleValueRef::Height(height) => Self::apply_unit(height, &mut self.node_bundle.style.height),
-            StyleValueRef::MinWidth(min_width) => Self::apply_unit(min_width, &mut self.node_bundle.style.min_width),
-            StyleValueRef::MinHeight(min_height) => Self::apply_unit(min_height, &mut self.node_bundle.style.min_height),
-            StyleValueRef::MaxWidth(max_width) => Self::apply_unit(max_width, &mut self.node_bundle.style.max_width),
-            StyleValueRef::MaxHeight(max_height) => Self::apply_unit(max_height, &mut self.node_bundle.style.max_height),
-            StyleValueRef::BorderWeight(weight) => self.apply_border_weight(weight),
-            StyleValueRef::BorderColor(color) => Self::apply_border_color(color, &mut self.node_bundle.border_color),
+            StyleValue::Flex(flex) => Self::apply_flex(flex),
+            StyleValue::FlexDirection(flex_direction) => Self::apply_flex_direction(flex_direction, &mut self.node.style.flex_direction),
+            StyleValue::FlexBasis(flex_basis) => Self::apply_unit(flex_basis, &mut self.node.style.flex_basis),
+            StyleValue::FlexGrow(flex_grow) => Self::apply_weight(flex_grow, &mut self.node.style.flex_grow),
+            StyleValue::FlexShrink(flex_shrink) => Self::apply_weight(flex_shrink, &mut self.node.style.flex_shrink),
+            StyleValue::AlignItems(align_items) => self.node.style.align_items = match align_items {
+                slate::style::property::AlignItems::Center => bevy::ui::AlignItems::Center,
+                _ => bevy::ui::AlignItems::Default
+            },
+            StyleValue::JustifyContent(justify_content) => self.node.style.justify_content = match justify_content {
+                slate::style::property::JustifyContent::Center => bevy::ui::JustifyContent::Center,
+                slate::style::property::JustifyContent::Start => bevy::ui::JustifyContent::Start,
+                _ => bevy::ui::JustifyContent::Default
+            },
+            StyleValue::Gap(gap) => Self::apply_gap(gap, &mut self.node.style),
+            StyleValue::BackgroundColor(color) => Self::apply_background_color(color, &mut self.node.background_color),
+            StyleValue::Margin(margin) => Self::apply_rect(margin, &mut self.node.style.margin),
+            StyleValue::Padding(padding) => Self::apply_rect(padding, &mut self.node.style.padding),
+            StyleValue::BoxSize(box_size) => Self::apply_box_size(box_size, &mut self.node.style),
+            StyleValue::Width(width) => Self::apply_unit(width, &mut self.node.style.width),
+            StyleValue::Height(height) => Self::apply_unit(height, &mut self.node.style.height),
+            StyleValue::MinWidth(min_width) => Self::apply_unit(min_width, &mut self.node.style.min_width),
+            StyleValue::MinHeight(min_height) => Self::apply_unit(min_height, &mut self.node.style.min_height),
+            StyleValue::MaxWidth(max_width) => Self::apply_unit(max_width, &mut self.node.style.max_width),
+            StyleValue::MaxHeight(max_height) => Self::apply_unit(max_height, &mut self.node.style.max_height),
+            StyleValue::BorderWeight(weight) => self.apply_border_weight(weight),
+            StyleValue::BorderRadius(radius) => Self::apply_border_radius(radius, &mut self.node.border_radius),
+            StyleValue::BorderColor(color) => Self::apply_border_color(color, &mut self.node.border_color),
+            StyleValue::ContentColor(color) => Self::apply_content_color(color, &mut self.node.style),
+            #[cfg(feature = "dev")]
             _ => {
                 tracing::warn!("Skipping unsupported style: {:?}", style_value);
             }
         }
+    }
+    
+    fn apply_content_color(color: &ContentColor, target: &mut Style) {
+        
     }
     
     //--
@@ -424,33 +485,45 @@ impl ElementNodeBundle {
         *val = unpack_rect(rect);
     }
     
+    /// TODO
+    #[inline(always)]
+    fn apply_border_radius(rect: &slate::style::primitive::Rect<f32>, val: &mut BorderRadius) {
+        *val = BorderRadius {
+            top_left: unpack_unit(rect.left()),
+            top_right: unpack_unit(rect.left()),
+            bottom_left: unpack_unit(rect.left()),
+            bottom_right: unpack_unit(rect.left()),
+        };
+    }
+    
     //--
     /// Apply a Flex style to the ElementNodeBundle.
     #[inline(always)]
-    fn apply_flex(&mut self, flex: &slate::style::property::Flex) {
+    fn apply_flex(flex: &slate::style::property::Flex) {
         tracing::warn!("Skipping unsupported style: Flex({:?})", flex);
     }
     
     /// Apply a FlexDirection style to the ElementNodeBundle.
     #[inline(always)]
-    fn apply_flex_direction(&mut self, flex_direction: &slate::style::property::FlexDirection) {
-        self.node_bundle.style.flex_direction = match flex_direction {
-            slate::style::property::FlexDirection::Row => FlexDirection::Row,
-            slate::style::property::FlexDirection::Column => FlexDirection::Column,
+    fn apply_flex_direction(source: &slate::style::property::FlexDirection, target: &mut bevy::ui::FlexDirection) {
+        *target = match source {
+            slate::style::property::FlexDirection::Row => bevy::ui::FlexDirection::Row,
+            slate::style::property::FlexDirection::Column => bevy::ui::FlexDirection::Column,
         };
     }
     
-    fn apply_gap(gap: &slate::style::property::Gap, style: &mut bevy::ui::Style) {
-        style.row_gap = unpack_unit(gap.unit());
-        style.column_gap = unpack_unit(gap.unit());
+    #[inline(always)]
+    fn apply_gap(source: &slate::style::property::Gap, target: &mut bevy::ui::Style) {
+        target.row_gap = unpack_unit(source.unit());
+        target.column_gap = unpack_unit(source.unit());
     }
     
     /// Apply a BoxSize style to the ElementNodeBundle.
     #[inline(always)]
-    fn apply_box_size(box_size: &slate::style::property::BoxSize, style: &mut bevy::ui::Style) {
+    fn apply_box_size(box_size: &slate::style::property::BoxSize, target: &mut bevy::ui::Style) {
         let Size2d(width, height) = unpack_size_2d(box_size.get_size_2d());
-        style.width = width;
-        style.height = height;
+        target.width = width;
+        target.height = height;
     }
     
     /// Apply a BackgroundColor style to the ElementNodeBundle.
@@ -462,7 +535,7 @@ impl ElementNodeBundle {
     /// Apply a BorderWeight style to the ElementNodeBundle.
     #[inline(always)]
     fn apply_border_weight(&mut self, weight: &slate::style::property::BorderWeight) {
-        self.node_bundle.style.border = unpack_rect(weight.rect());
+        self.node.style.border = unpack_rect(weight.rect());
     }
     
     /// Apply a BorderColor style to the ElementNodeBundle.
@@ -506,10 +579,10 @@ fn unpack_unit(unit: &slate::style::primitive::Unit<f32>) -> bevy::ui::Val {
 
 /// Unpack a Slate Color into a Bevy Color.
 #[inline(always)]
-fn unpack_color(color: &slate::style::primitive::Color) -> bevy::render::color::Color {
+fn unpack_color(color: &slate::style::primitive::Color) -> bevy::color::Color {
     match color {
-        slate::style::primitive::Color::Rgba(r, g, b, a) => bevy::render::color::Color::rgba_u8(*r, *g, *b, *a),
-        slate::style::primitive::Color::Hsla(h, s, l, a) => bevy::render::color::Color::hsla(*h * 360.0, *s, *l, *a),
-        slate::style::primitive::Color::Transparent => bevy::render::color::Color::rgba_u8(0, 0, 0, 0),
+        slate::style::primitive::Color::Rgba(r, g, b, a) => bevy::color::Color::srgba_u8(*r, *g, *b, *a),
+        slate::style::primitive::Color::Hsla(h, s, l, a) => bevy::color::Color::hsla(*h * 360.0, *s, *l, *a),
+        slate::style::primitive::Color::Transparent => bevy::color::Color::srgba_u8(0, 0, 0, 0),
     }
 }

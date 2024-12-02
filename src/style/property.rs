@@ -5,14 +5,8 @@ use core::fmt::Debug;
 // use alloc::vec::Vec;
 // use alloc::format;
 
-
-use chalk::Color;
-use chalk::Size2d;
-use chalk::Unit;
-use chalk::Rect;
-
+use crate::style::Style;
 use crate::style::StyleValue;
-use crate::style::StyleValueRef;
 // use crate::style::primitive::Weight;
 use crate::style::primitive::Unit;
 use crate::style::primitive::Size2d;
@@ -20,22 +14,22 @@ use crate::style::primitive::Rect;
 use crate::style::primitive::Color;
 
 /// TODO
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Copy, Clone, Debug, PartialEq)]
 pub struct Flex(bool);
 
-impl Into<StyleValueRef> for Flex {
+impl Into<StyleValue> for Flex {
     /// TODO
-    fn into(self) -> StyleValueRef {
-        StyleValueRef::Flex(self)
+    fn into(self) -> StyleValue {
+        StyleValue::Flex(self)
     }
 }
 
-impl StyleValue for Flex {
+impl Style for Flex {
     //..
 }
 
 /// TODO
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Copy, Clone, Debug, PartialEq)]
 pub enum FlexDirection {
     /// TODO
     Column,
@@ -45,14 +39,14 @@ pub enum FlexDirection {
     Row,
 }
 
-impl Into<StyleValueRef> for FlexDirection {
+impl Into<StyleValue> for FlexDirection {
     /// TODO
-    fn into(self) -> StyleValueRef {
-        StyleValueRef::FlexDirection(self)
+    fn into(self) -> StyleValue {
+        StyleValue::FlexDirection(self)
     }
 }
 
-impl StyleValue for FlexDirection {
+impl Style for FlexDirection {
     //..
 }
 
@@ -92,31 +86,31 @@ impl Deref for FlexBasis {
 }
 
 #[automatically_derived]
-impl Into<StyleValueRef> for FlexBasis {
-    fn into(self) -> StyleValueRef {
-        StyleValueRef::FlexBasis(self)
+impl Into<StyleValue> for FlexBasis {
+    fn into(self) -> StyleValue {
+        StyleValue::FlexBasis(self)
     }
 }
 
 #[automatically_derived]
-impl StyleValue for FlexBasis {
+impl Style for FlexBasis {
     //..
 }
 
 //--
 /// TODO
 // #[derive(StyleValue, Debug, PartialEq)]
-#[derive(Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct FlexGrow(f32);
 
 #[automatically_derived]
 impl FlexGrow {
     /// TODO
-    pub fn new(value: f32) -> Self {
-        FlexGrow(value)
+    pub fn new<V: Into<f32>>(value: V) -> Self {
+        FlexGrow(value.into())
     }
 }
-    
+
 #[automatically_derived]
 impl Deref for FlexGrow {
     type Target = f32;
@@ -128,35 +122,35 @@ impl Deref for FlexGrow {
 }
 
 #[automatically_derived]
-impl Into<StyleValueRef> for FlexGrow {
+impl Into<StyleValue> for FlexGrow {
     /// TODO
-    fn into(self) -> StyleValueRef {
-        StyleValueRef::FlexGrow(self)
+    fn into(self) -> StyleValue {
+        StyleValue::FlexGrow(self)
     }
 }
 
 #[automatically_derived]
-impl StyleValue for FlexGrow {
+impl Style for FlexGrow {
     //..
 }
 
 /// TODO
-#[derive(Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct FlexShrink(f32);
 
 #[automatically_derived]
 impl FlexShrink {
     /// TODO
-    pub fn new(value: f32) -> Self {
-        FlexShrink(value)
+    pub fn new<V: Into<f32>>(value: V) -> Self {
+        FlexShrink(value.into())
     }
 }
 
 #[automatically_derived]
-impl Into<StyleValueRef> for FlexShrink {
+impl Into<StyleValue> for FlexShrink {
     /// TODO
-    fn into(self) -> StyleValueRef {
-        StyleValueRef::FlexShrink(self)
+    fn into(self) -> StyleValue {
+        StyleValue::FlexShrink(self)
     }
 }
 
@@ -170,66 +164,120 @@ impl Deref for FlexShrink {
 }
 
 #[automatically_derived]
-impl StyleValue for FlexShrink {
+impl Style for FlexShrink {
+    //..
+}
+
+/// TODO
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum AlignItems {
+    Stretch,
+    Center,
+    // Start,
+    // End,
+}
+
+#[automatically_derived]
+impl Into<StyleValue> for AlignItems {
+    /// TODO
+    fn into(self) -> StyleValue {
+        StyleValue::AlignItems(self)
+    }
+}
+
+#[automatically_derived]
+impl Style for AlignItems {
+    //..
+}
+
+/// TODO
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum JustifyContent {
+    Start,
+    Center,
+    // SpaceBetween,
+    // SpaceAround,
+    // SpaceEvenly,
+}
+
+#[automatically_derived]
+impl Into<StyleValue> for JustifyContent {
+    /// TODO
+    fn into(self) -> StyleValue {
+        StyleValue::JustifyContent(self)
+    }
+}
+
+#[automatically_derived]
+impl Style for JustifyContent {
     //..
 }
 
 //--
 /// TODO
-#[derive(Unit, Default, Clone, Copy, Debug, PartialEq)]
+#[derive(chalk::Unit, Default, Clone, Copy, Debug, PartialEq)]
 pub struct Gap(Unit<f32>);
 
 /// TODO
-#[derive(Color, Default, Debug, PartialEq)]
+#[derive(chalk::Color, Default, Copy, Clone, Debug, PartialEq)]
 pub struct BackgroundColor(Color);
 
 /// TODO
-#[derive(Rect, Default, Debug, PartialEq)]
+#[derive(chalk::Color, Default, Copy, Clone, Debug, PartialEq)]
+pub struct ContentColor(Color);
+
+/// TODO
+#[derive(chalk::Rect, Default, Copy, Clone, Debug, PartialEq)]
 pub struct Margin(Rect<f32>);
 
 /// TODO
-#[derive(Rect, Default, Debug, PartialEq)]
+#[derive(chalk::Rect, Default, Copy, Clone, Debug, PartialEq)]
 pub struct Padding(Rect<f32>);
 
 /// TODO
-#[derive(Size2d, Default, Debug, PartialEq)]
+#[derive(chalk::Size2d, Default, Copy, Clone, Debug, PartialEq)]
 pub struct BoxSize(Size2d<f32>);
 
 //--
 /// TODO
-#[derive(Unit, Default, Clone, Copy, Debug, PartialEq)]
+#[derive(chalk::Unit, Default, Clone, Copy, Debug, PartialEq)]
 pub struct Width(Unit<f32>);
 
 //--
 /// TODO
-#[derive(Unit, Default, Clone, Copy, Debug, PartialEq)]
+#[derive(chalk::Unit, Default, Clone, Copy, Debug, PartialEq)]
 pub struct Height(Unit<f32>);
 
 //--
 /// TODO
-#[derive(Unit, Default, Clone, Copy, Debug, PartialEq)]
+#[derive(chalk::Unit, Default, Clone, Copy, Debug, PartialEq)]
 pub struct MinWidth(Unit<f32>);
 
 //--
 /// TODO
-#[derive(Unit, Default, Clone, Copy, Debug, PartialEq)]
+#[derive(chalk::Unit, Default, Clone, Copy, Debug, PartialEq)]
 pub struct MinHeight(Unit<f32>);
 
 //--
 /// TODO
-#[derive(Unit, Default, Clone, Copy, Debug, PartialEq)]
+#[derive(chalk::Unit, Default, Clone, Copy, Debug, PartialEq)]
 pub struct MaxWidth(Unit<f32>);
 
 //--
 /// TODO
-#[derive(Unit, Default, Clone, Copy, Debug, PartialEq)]
+#[derive(chalk::Unit, Default, Clone, Copy, Debug, PartialEq)]
 pub struct MaxHeight(Unit<f32>);
 
 //--
 /// TODO
-#[derive(Rect, Default, Debug, PartialEq)]
+#[derive(chalk::Rect, Default, Copy, Clone, Debug, PartialEq)]
 pub struct BorderWeight(Rect<f32>);
 
+//--
 /// TODO
-#[derive(Color, Default, Debug, PartialEq)]
+#[derive(chalk::Rect, Default, Copy, Clone, Debug, PartialEq)]
+pub struct BorderRadius(Rect<f32>);
+
+/// TODO
+#[derive(chalk::Color, Default, Copy, Clone, Debug, PartialEq)]
 pub struct BorderColor(Color);

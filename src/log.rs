@@ -2,8 +2,15 @@
 
 use tracing_subscriber::FmtSubscriber;
 
+#[cfg(feature = "profiling")]
+use tracy_client::Client as TracyClient;
+
+//---
 /// Init a basic global logger with a few configurable bells-n-whistles.
 pub fn init(filter: &str) {
+    #[cfg(feature = "profiling")]
+    let _tracy_client = TracyClient::start();
+    
     let subscriber = FmtSubscriber::builder()
         .with_env_filter(filter)
         .with_timer(tracing_subscriber::fmt::time::uptime())

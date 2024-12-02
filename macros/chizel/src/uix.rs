@@ -6,8 +6,6 @@ use syn::*;
 use syn::parse::Parse;
 use syn::parse::ParseStream;
 use syn::parse::Result;
-// use syn::token::Brace;
-// use syn::punctuated::Punctuated;
 
 use quote::*;
 
@@ -15,12 +13,11 @@ use crate::element::ElementClassAttribute;
 use crate::element::ElementEventAttribute;
 use crate::element::ElementProp;
 use crate::element::ElementStyleAttribute;
-use crate::util::parse::get_attr_ident;
 
 //---
-/// Global element counter. Used to build unique identifiers for generated
+/// Global element index. Used to build unique identifiers for generated
 /// names, doc comments, debug info, etc.
-static ELEMENT_COUNT: AtomicUsize = AtomicUsize::new(0);
+static ELEMENT_IDX: AtomicUsize = AtomicUsize::new(0);
 
 //---
 /// TODO
@@ -34,6 +31,8 @@ pub struct UIxBlock {
 }
 
 impl UIxBlock {
+    const SELF_KEYWORD: &str = "self";
+    
     /// TODO
     pub fn new() -> Self {
         Self {
@@ -46,21 +45,26 @@ impl UIxBlock {
 impl Parse for UIxBlock {
     /// Lines starting with `#` are used to annotate statements within 
     /// the block and may be used to alter how the block is built.
-    fn parse(token_buf: ParseStream) -> Result<Self> {
+    fn parse(tokens: ParseStream) -> Result<Self> {
         let mut block = UIxBlock::new();
         
-        while !token_buf.is_empty() {
-            if token_buf.peek(syn::Token![.]) {
+        while !tokens.is_empty() {
+            if tokens.peek(syn::Token![.]) || tokens.peek(syn::Token![^]) {
                 let mut class_names = Vec::new();
                 
                 loop {
-                    if token_buf.peek(syn::Token![.]) {
-                        token_buf.parse::<syn::Token![.]>()?;
-                        class_names.push(token_buf.parse::<syn::Ident>()?);
+                    if tokens.peek(syn::Token![^]) {
+                        tokens.parse::<syn::Token![^]>()?;
+                        tokens.parse::<syn::Token![self]>()?;
                         continue;
                     }
-                    if token_buf.peek(syn::Token![,]) {
-                        token_buf.parse::<syn::Token![,]>()?;
+                    if tokens.peek(syn::Token![.]) {
+                        tokens.parse::<syn::Token![.]>()?;
+                        class_names.push(tokens.parse::<syn::Ident>()?);
+                        continue;
+                    }
+                    if tokens.peek(syn::Token![,]) {
+                        tokens.parse::<syn::Token![,]>()?;
                         continue;
                     }
                     
@@ -70,7 +74,7 @@ impl Parse for UIxBlock {
                 }
                 
                 let content;
-                braced!(content in token_buf);
+                braced!(content in tokens);
                 let parsed_styles = content.parse_terminated(Expr::parse, syn::Token![,])?;
                 
                 for expr in parsed_styles {
@@ -78,7 +82,8 @@ impl Parse for UIxBlock {
                         #[cfg(feature = "verbose")]
                         println!("Parsed Class Name: {:?}", class_name);
                                 
-                        block.styles.entry(class_name.clone())
+                        block.styles
+                            .entry(class_name.clone())
                             .or_insert_with(Vec::new)
                             .push(expr.clone());
                     }
@@ -86,17 +91,20 @@ impl Parse for UIxBlock {
                 
                 #[cfg(feature = "inspect")]
                 println!("Parsed styles: {:#?}", block.styles);
+                
+                // Start again in the same block,
+                // after the parsed stylesheet ..
+                continue;
             }
             
-            match UIxElement::parse(token_buf) {
+            match UIxElement::parse(tokens) {
                 Ok(mut element) => {
                     element.root = true;
-                    
                     block.roots.push(element);
                 }
                 Err(error) => {
                     // Return an error if unable to recover
-                    return Err(token_buf.error(format!("Couldn't parse element: {:}", error)));
+                    return Err(tokens.error(format!("Couldn't parse element: {:}", error)));
                 }
             }
         }
@@ -109,27 +117,36 @@ impl ToTokens for UIxBlock {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let roots = &self.roots;
         
-        let styles = self.styles.iter().map(|(key, value)| {
+        #[cfg(feature = "inspect")]
+        for root_element in roots {
+            println!("Root Element: {:#?}", root_element);
+        }
+        
+        let styles = self.styles.iter().map(|(key, values)| {
             #[cfg(feature = "verbose")]
             println!("Printing Class Block Variable: {:?}", key);
             
-            let values = value.iter().map(|value| {
+            let values = values.iter().map(|value| {
                 quote! {
                     stylesheet.push( #value );
                 }
             });
             
-            quote! {
-                let #key = move |stylesheet: &mut StyleSheet| {
-                    #(#values)*
-                };
+            if key == UIxBlock::SELF_KEYWORD {
+                quote! {
+                    scaffold
+                        .with_class_attr(move |stylesheet: &mut StyleSheet<'_>| {
+                            #(#values)*
+                        });
+                }
+            } else {
+                quote! {
+                    let #key = move |stylesheet: &mut StyleSheet<'_>| {
+                        #(#values)*
+                    };
+                }
             }
         });        
-        
-        #[cfg(feature = "inspect")]
-        for root_element in roots {
-            println!("Root Element: {:#?}", root_element);
-        }
         
         tokens.extend(quote! {
             #(#styles)*
@@ -143,6 +160,9 @@ impl ToTokens for UIxBlock {
 pub struct UIxElement {
     /// TODO: Make private.
     pub ident: Ident,
+    
+    /// TODO: Make private.
+    pub ctor: Option<ExprCall>,
     
     /// TODO: Make private.
     pub prefix: String,
@@ -177,9 +197,10 @@ impl UIxElement {
     pub fn new(ident: Ident) -> Self {
         Self {
             ident,
+            ctor: None,
             prefix: String::new(),
             root: false,
-            index: ELEMENT_COUNT.fetch_add(1, Ordering::SeqCst),
+            index: ELEMENT_IDX.fetch_add(1, Ordering::SeqCst),
             is_closed: false,
             events: Vec::new(),
             styles: Vec::new(),
@@ -233,7 +254,7 @@ impl Parse for UIxElement {
             }
             
             for attr in attributes {
-                match get_attr_ident(&attr) {
+                match attr.path().get_ident() {
                     Some(attr_ident) => {
                         match attr_ident.to_string().as_str() {
                             // Found UUID, as in `#[uuid(3500dad6-cdef-442a-ba05-d20c1f3b1921)]`.
@@ -284,6 +305,7 @@ impl Parse for UIxElement {
         // Parse the initial leading-tag `<` token.
         token_buf.parse::<syn::Token![<]>()?;
         
+        // TODO: Parse a path here instead.
         let name = Ident::parse(token_buf)?;
         
         let mut element = UIxElement::new(name);
@@ -291,6 +313,11 @@ impl Parse for UIxElement {
         element.styles.extend(styles.drain(..));
         element.classes.extend(classes.drain(..));
         element.is_closed = false;
+        
+        if token_buf.peek(syn::Token![::]) {
+            token_buf.parse::<syn::Token![::]>()?;
+            element.ctor = Some(token_buf.parse::<syn::ExprCall>()?);
+        }
         
         loop {
             // Is this the end of the opening tag of the element? `>`
@@ -395,6 +422,10 @@ impl ToTokens for UIxElement {
         // let prefix = Ident::new(&self.prefix, ident.span());
         let var_name = Ident::new(&self.name(), ident.span());
         
+        let ctor = self.ctor.to_owned().or_else(|| Some(syn::parse_quote! {
+            default()
+        }));
+        
         // Write props, where `prop="value"`, `prop={value}`, or `prop=[value]`
         // is converted to `.with_prop(value)`.
         let mut props = proc_macro2::TokenStream::new();
@@ -447,7 +478,7 @@ impl ToTokens for UIxElement {
         // TODO: Remove `.with_children()` when there are no children.
         tokens.extend(quote! {
             let #var_name = scaffold.add({
-                #ident ::default() #props
+                #ident :: #ctor #props
             })?
                 #events // .with_event_attr(..),*
                 #styles // .with_style_attr(..),*
