@@ -1,5 +1,6 @@
 use bevy::ecs::prelude::*;
 use bevy::hierarchy::BuildChildren;
+use bevy::prelude::ChildBuild as _;
 
 use crate::tool::SelectionLasso;
 use crate::tool::Tool;

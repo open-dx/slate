@@ -17,7 +17,7 @@ use bevy::transform::prelude::*;
 
 use bevy::window::Window;
 use bevy::window::PrimaryWindow;
-use bevy::window::CursorIcon;
+use winit::window::CursorIcon;
 
 use bevy::gizmos::gizmos::Gizmos;
 
@@ -77,7 +77,7 @@ impl ReticlePlugin {
                             gizmos.circle_2d(position, style.size, style.color);
                         }
                         ReticleShape::Square => {
-                            gizmos.rect_2d(position, 0., Vec2::ONE * style.size, style.color);
+                            gizmos.rect_2d(position, Vec2::ONE * style.size, style.color);
                         }
                         ReticleShape::Triangle => {
                             gizmos.circle_2d(position, style.size, style.color).resolution(3);

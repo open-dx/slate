@@ -53,24 +53,24 @@ pub struct ScriptLoader {
     // compiler: TypeScriptLoader,
 }
 
-impl AssetLoader for ScriptLoader {
-    type Asset = Script;
-    type Settings = ScriptSettings;
-    type Error = ScriptError;
+// impl AssetLoader for ScriptLoader {
+//     type Asset = Script;
+//     type Settings = ScriptSettings;
+//     type Error = ScriptError;
     
-    async fn load<'loader>(&'loader self, reader: &'loader mut Reader<'_>, _settings: &'loader ScriptSettings, _ctx: &'loader mut LoadContext<'_>) -> Result<Self::Asset, Self::Error> {
-        info!("Loading Script...");
+//     async fn load<'loader>(&'loader self, reader: &'loader mut Reader<'_>, _settings: &'loader ScriptSettings, _ctx: &'loader mut LoadContext<'_>) -> Result<Self::Asset, Self::Error> {
+//         info!("Loading Script...");
         
-        let mut bytes = Vec::new();
-        reader.read_to_end(&mut bytes).await?;
+//         let mut bytes = Vec::new();
+//         reader.read_to_end(&mut bytes).await?;
         
-        let script = Script::from(bytes.to_owned());
-        // ctx.set_default_asset(LoadedAsset::new_with_dependencies(script, None));
+//         let script = Script::from(bytes.to_owned());
+//         // ctx.set_default_asset(LoadedAsset::new_with_dependencies(script, None));
         
-        Ok(script)
-    }
+//         Ok(script)
+//     }
     
-    fn extensions(&self) -> &[&str] {
-        &["ethos", "ts", "tsx"]
-    }
-}
+//     fn extensions(&self) -> &[&str] {
+//         &["ethos", "ts", "tsx"]
+//     }
+// }

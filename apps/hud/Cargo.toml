@@ -27,7 +27,7 @@ tracing = "0.1.40"
 serde = { version = "1.0", features = ["std", "derive"] }
 
 [dependencies.bevy]
-version = "0.14"
+version = "0.15"
 
 [dependencies.atlas]
 path = "../../../atlas"

@@ -38,7 +38,7 @@ dpi = { version = "0.1" }
 winit = "0.30.5"
 
 [dependencies.bevy]
-version = "0.14"
+version = "0.15"
 features = [
     # TODO
 ]

@@ -21,13 +21,10 @@ use bevy::prelude::Res;
 use bevy::prelude::ResMut;
 use bevy::prelude::Resource;
 use bevy::prelude::TextBundle;
-use bevy::text::Text;
-use bevy::text::TextStyle;
 use bevy::ui::AlignItems;
 use bevy::ui::BackgroundColor;
 use bevy::ui::Interaction;
 use bevy::ui::JustifyContent;
-use bevy::ui::Style;
 use bevy::ui::Val;
 use bevy::window::Window;
 use dpi::LogicalPosition;
@@ -157,7 +154,7 @@ pub fn text_input_defocus_system(
 pub fn text_input_capture_system(
     focused_input: Res<FocusedInput>,
     mut char_evr: EventReader<KeyboardInput>,
-    mut query: Query<&mut Text>,
+    mut query: Query<&mut bevy::ui::widget::Text>,
 ) {
     if let Some(focused_input) = focused_input.0 {
         // Get the single Text component we have
@@ -167,20 +164,20 @@ pub fn text_input_capture_system(
                 #[cfg(all(feature="verbose", feature="inspect"))]
                 tracing::debug!("Sending input to entity#{:}: {:#?}", focused_input, ev);
                 
-                let len = text.sections[0].value.len();
+                let len = text.0.len();
                 let (min_len, max_len) = (0, 120);
                 
                 match ev.logical_key {
                     Key::Character(ref character) if ev.state == ButtonState::Pressed && (len + character.len()) < max_len => {
                         for character in character.chars() {
-                            text.sections[0].value.push(character);
+                            text.0.push(character);
                         }
                     }
                     Key::Space if ev.state == ButtonState::Pressed && (len + 1) < max_len => {
-                        text.sections[0].value.push(' ');
+                        text.0.push(' ');
                     }
                     Key::Backspace if ev.state == ButtonState::Pressed && len > min_len => {
-                        text.sections[0].value.pop();
+                        text.0.pop();
                     }
                     _ => {
                         // TODO

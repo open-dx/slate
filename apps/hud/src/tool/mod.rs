@@ -31,7 +31,6 @@ pub struct SelectionTool {
 #[derive(Bundle, Clone, Debug)]
 pub struct SelectionLasso {
     pub node: Node,
-    pub style: Style,
     pub background_color: BackgroundColor,
     pub focus_policy: FocusPolicy,
     pub transform: Transform,
@@ -45,15 +44,15 @@ pub struct SelectionLasso {
 impl From<Location> for SelectionLasso {
     fn from(location: Location) -> Self {
         SelectionLasso {
-            style: Style {
+            node: Node {
                 position_type: PositionType::Absolute,
                 left: Val::Px(location.position.x),
                 right: Val::DEFAULT,
                 top: Val::DEFAULT,
                 bottom: Val::Px(location.position.x),
-                ..default()
+                ..Default::default()
             },
-            ..default()
+            ..Default::default()
         }
     }
 }
@@ -63,7 +62,6 @@ impl Default for SelectionLasso {
         SelectionLasso {
             background_color: Color::NONE.into(),
             node: Default::default(),
-            style: Default::default(),
             focus_policy: Default::default(),
             transform: Default::default(),
             global_transform: Default::default(),

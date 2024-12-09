@@ -1,5 +1,6 @@
 // TODO: Remove this ..
 #![allow(unused)]
+#![allow(deprecated)]
 
 // Required for Slate's custom allocation feature.
 // TODO: Remove this when v2 is stable ..

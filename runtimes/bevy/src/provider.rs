@@ -11,13 +11,13 @@ use bevy::ecs::system::Commands;
 use bevy::ecs::system::Query;
 use bevy::hierarchy::BuildChildren;
 use bevy::hierarchy::ChildBuilder;
+use bevy::prelude::ChildBuild;
 use bevy::prelude::Image;
+use bevy::text::TextColor;
+use bevy::text::TextFont;
 use bevy::ui::prelude::*;
 use bevy::ui::FocusPolicy;
 use bevy::text::Font;
-use bevy::text::Text;
-use bevy::text::TextSection;
-use bevy::text::TextStyle;
 
 use slate::element::Content;
 use slate::event::EventPin;
@@ -299,12 +299,12 @@ impl WindowSurface {
         let mut element_node = ElementNodeBundle::from(element);
         
         let text = element_node.content.text.take().and_then(|mut text| {
-            if let Some(font_asset) = self.font_assets.get(&element_node.font_style.family) {
-                for section in &mut text.sections {
-                    section.style.font = font_asset.clone_weak();
-                    section.style.font_size = element_node.font_style.size;
-                }
-            }
+            // if let Some(font_asset) = self.font_assets.get(&element_node.font_style.family) {
+            //     for section in &mut text.sections {
+            //         section.style.font = font_asset.clone_weak();
+            //         section.style.font_size = element_node.font_style.size;
+            //     }
+            // }
             Some(text)
         });
         
@@ -317,13 +317,7 @@ impl WindowSurface {
         if let Some(text) = text {
             element_node_entity
                 .with_children(|child_builder| {
-                    child_builder.spawn((
-                        Interaction::default(),
-                        TextBundle {
-                            text,
-                            ..Default::default()
-                        }
-                    ));
+                    child_builder.spawn(text).insert(Interaction::default());
                 });
         }
         
@@ -367,23 +361,20 @@ impl WindowSurface {
 #[derive(Bundle)]
 pub struct SurfaceNodeBundle {
     /// TODO
-    node: NodeBundle,
+    node: Node,
 }
 
 impl From<&Surface<'_>> for SurfaceNodeBundle {
     /// TODO
     fn from(_surface_ref: &Surface<'_>) -> Self {
         SurfaceNodeBundle {
-            node: NodeBundle {
-                style: Style {
-                    // display: Display::None,
-                    flex_direction: FlexDirection::Column,
-                    flex_grow: 0.,
-                    flex_shrink: 1.,
-                    width: Val::Percent(100.),
-                    height: Val::Percent(100.),
-                    ..Default::default()
-                },
+            node: Node {
+                // display: Display::None,
+                flex_direction: FlexDirection::Column,
+                flex_grow: 0.,
+                flex_shrink: 1.,
+                width: Val::Percent(100.),
+                height: Val::Percent(100.),
                 ..Default::default()
             },
         }
@@ -459,13 +450,14 @@ pub struct ElementFontStyle {
 
 #[derive(Bundle, Default, Debug)]
 pub struct ElementNodeBundle {
-    node: NodeBundle,
-    content: ElementContent,
-    font_style: ElementFontStyle,
+    node: Node,
     handle: ElementNodeHandle,
-    // background_color: BackgroundColor,
-    // border_color: BorderColor,
-    // border_radius: BorderRadius,
+    content: ElementContent,
+    text_font: TextFont,
+    text_color: TextColor,
+    background_color: BackgroundColor,
+    border_color: BorderColor,
+    border_radius: BorderRadius,
 }
 
 impl ElementNodeBundle {
@@ -503,20 +495,7 @@ impl ElementNodeBundle {
     pub fn apply_content(&mut self, element: &ElementNode<'_>) {
         match element.content() {
             Some(Content::Text(content)) => {
-                self.content.text = Some(Text {
-                    sections: vec![
-                        TextSection {
-                            value: String::from(content),
-                            style: TextStyle {
-                                font: Handle::default(),
-                                font_size: self.font_style.size,
-                                color: self.font_style.color,
-                            },
-                        },
-                    ],
-                    justify: bevy::text::JustifyText::Left,
-                    linebreak_behavior: bevy::text::BreakLineOn::AnyCharacter,
-                });
+                self.content.text = Some(Text(String::from(content)));
             },
             Some(Content::WebView(address)) => {
                 tracing::debug!("Found Webview with address {:?} ..", address);
@@ -541,36 +520,36 @@ impl ElementNodeBundle {
         #[allow(unreachable_patterns)]
         match style_value {
             StyleValue::Flex(flex) => Self::apply_flex(flex),
-            StyleValue::FlexDirection(flex_direction) => Self::apply_flex_direction(flex_direction, &mut self.node.style.flex_direction),
-            StyleValue::FlexBasis(flex_basis) => Self::apply_unit(flex_basis, &mut self.node.style.flex_basis),
-            StyleValue::FlexGrow(flex_grow) => Self::apply_weight(flex_grow, &mut self.node.style.flex_grow),
-            StyleValue::FlexShrink(flex_shrink) => Self::apply_weight(flex_shrink, &mut self.node.style.flex_shrink),
-            StyleValue::AlignItems(align_items) => self.node.style.align_items = match align_items {
+            StyleValue::FlexDirection(flex_direction) => Self::apply_flex_direction(flex_direction, &mut self.node.flex_direction),
+            StyleValue::FlexBasis(flex_basis) => Self::apply_unit(flex_basis, &mut self.node.flex_basis),
+            StyleValue::FlexGrow(flex_grow) => Self::apply_weight(flex_grow, &mut self.node.flex_grow),
+            StyleValue::FlexShrink(flex_shrink) => Self::apply_weight(flex_shrink, &mut self.node.flex_shrink),
+            StyleValue::AlignItems(align_items) => self.node.align_items = match align_items {
                 slate::style::property::AlignItems::Center => bevy::ui::AlignItems::Center,
                 _ => bevy::ui::AlignItems::Default
             },
-            StyleValue::JustifyContent(justify_content) => self.node.style.justify_content = match justify_content {
+            StyleValue::JustifyContent(justify_content) => self.node.justify_content = match justify_content {
                 slate::style::property::JustifyContent::Center => bevy::ui::JustifyContent::Center,
                 slate::style::property::JustifyContent::Start => bevy::ui::JustifyContent::Start,
                 _ => bevy::ui::JustifyContent::Default
             },
-            StyleValue::Gap(gap) => Self::apply_gap(gap, &mut self.node.style),
-            StyleValue::BackgroundColor(color) => Self::apply_background_color(color, &mut self.node.background_color),
-            StyleValue::Margin(margin) => Self::apply_rect(margin, &mut self.node.style.margin),
-            StyleValue::Padding(padding) => Self::apply_rect(padding, &mut self.node.style.padding),
-            StyleValue::BoxSize(box_size) => Self::apply_box_size(box_size, &mut self.node.style),
-            StyleValue::Width(width) => Self::apply_unit(width, &mut self.node.style.width),
-            StyleValue::Height(height) => Self::apply_unit(height, &mut self.node.style.height),
-            StyleValue::MinWidth(min_width) => Self::apply_unit(min_width, &mut self.node.style.min_width),
-            StyleValue::MinHeight(min_height) => Self::apply_unit(min_height, &mut self.node.style.min_height),
-            StyleValue::MaxWidth(max_width) => Self::apply_unit(max_width, &mut self.node.style.max_width),
-            StyleValue::MaxHeight(max_height) => Self::apply_unit(max_height, &mut self.node.style.max_height),
+            StyleValue::Gap(gap) => Self::apply_gap(gap, &mut self.node),
+            StyleValue::BackgroundColor(color) => Self::apply_background_color(color, &mut self.background_color),
+            StyleValue::Margin(margin) => Self::apply_rect(margin, &mut self.node.margin),
+            StyleValue::Padding(padding) => Self::apply_rect(padding, &mut self.node.padding),
+            StyleValue::BoxSize(box_size) => Self::apply_box_size(box_size, &mut self.node),
+            StyleValue::Width(width) => Self::apply_unit(width, &mut self.node.width),
+            StyleValue::Height(height) => Self::apply_unit(height, &mut self.node.height),
+            StyleValue::MinWidth(min_width) => Self::apply_unit(min_width, &mut self.node.min_width),
+            StyleValue::MinHeight(min_height) => Self::apply_unit(min_height, &mut self.node.min_height),
+            StyleValue::MaxWidth(max_width) => Self::apply_unit(max_width, &mut self.node.max_width),
+            StyleValue::MaxHeight(max_height) => Self::apply_unit(max_height, &mut self.node.max_height),
             StyleValue::FontFamily(family) => self.apply_font_family(family),
             StyleValue::FontSize(size) => self.apply_font_size(size),
             StyleValue::ContentColor(color) => self.apply_text_color(color),
             StyleValue::BorderWeight(weight) => self.apply_border_weight(weight),
-            StyleValue::BorderRadius(radius) => Self::apply_border_radius(radius, &mut self.node.border_radius),
-            StyleValue::BorderColor(color) => Self::apply_border_color(color, &mut self.node.border_color),
+            StyleValue::BorderRadius(radius) => Self::apply_border_radius(radius, &mut self.border_radius),
+            StyleValue::BorderColor(color) => Self::apply_border_color(color, &mut self.border_color),
             #[cfg(feature = "dev")]
             _ => {
                 tracing::warn!("Skipping unsupported style: {:?}", style_value);
@@ -579,11 +558,11 @@ impl ElementNodeBundle {
     }
     
     fn apply_font_family(&mut self, font_family: &FontFamily) {
-        self.font_style.family = font_family.name().to_owned();
+        // self.text_font.font = font_family.name().to_owned();
     }
     
     fn apply_font_size(&mut self, size: &FontSize) {
-        self.font_style.size = match size.unit() {
+        self.text_font.font_size = match size.unit() {
             Unit::Px(pixels) => *pixels,
             _ => {
                 tracing::warn!("unsupported font size '{:?}'", size);
@@ -593,7 +572,7 @@ impl ElementNodeBundle {
     }
     
     fn apply_text_color(&mut self, color: &ContentColor) {
-        self.font_style.color = unpack_color(&color);
+        self.text_color = TextColor(unpack_color(&color));
     }
     
     //--
@@ -644,14 +623,14 @@ impl ElementNodeBundle {
     }
     
     #[inline(always)]
-    fn apply_gap(source: &slate::style::property::Gap, target: &mut bevy::ui::Style) {
+    fn apply_gap(source: &slate::style::property::Gap, target: &mut bevy::ui::Node) {
         target.row_gap = unpack_unit(source.unit());
         target.column_gap = unpack_unit(source.unit());
     }
     
     /// Apply a BoxSize style to the ElementNodeBundle.
     #[inline(always)]
-    fn apply_box_size(box_size: &slate::style::property::BoxSize, target: &mut bevy::ui::Style) {
+    fn apply_box_size(box_size: &slate::style::property::BoxSize, target: &mut bevy::ui::Node) {
         let Size2d(width, height) = unpack_size_2d(box_size.get_size_2d());
         target.width = width;
         target.height = height;
@@ -666,7 +645,7 @@ impl ElementNodeBundle {
     /// Apply a BorderWeight style to the ElementNodeBundle.
     #[inline(always)]
     fn apply_border_weight(&mut self, weight: &slate::style::property::BorderWeight) {
-        self.node.style.border = unpack_rect(weight.rect());
+        self.node.border = unpack_rect(weight.rect());
     }
     
     /// Apply a BorderColor style to the ElementNodeBundle.

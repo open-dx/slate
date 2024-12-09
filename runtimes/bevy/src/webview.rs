@@ -2,6 +2,9 @@ use std::collections::HashMap;
 use std::cell::OnceCell;
 use std::sync::Arc;
 
+use bevy::math::Rect;
+use bevy::math::Vec2;
+use bevy::ui::ComputedNode;
 use uuid::Uuid as UUID;
 
 use crossbeam_channel::Sender;
@@ -56,13 +59,10 @@ use bevy::color::Color;
 use bevy::input::keyboard::Key;
 use bevy::input::keyboard::KeyboardInput;
 use bevy::input::ButtonState;
-use bevy::text::Text;
-use bevy::text::TextStyle;
 use bevy::ui::AlignItems;
 use bevy::ui::BackgroundColor;
 use bevy::ui::Interaction;
 use bevy::ui::JustifyContent;
-use bevy::ui::Style;
 use bevy::ui::Val;
 use bevy::ui::Node;
 use bevy::ui::UiRect;
@@ -174,13 +174,13 @@ pub fn spawn_webview_controllers(
     windows: Query<(Entity, &Window), With<PrimaryWindow>>,
     winit_windows: NonSend<WinitWindows>,
     mut webview_provider: NonSendMut<WebViewProvider>,
-    mut webviews: Query<(Entity, &Node, &GlobalTransform, &Transform, &WebViewDisplay), Added<WebViewDisplay>>,
+    mut webviews: Query<(Entity, &Node, &ComputedNode, &GlobalTransform, &Transform, &WebViewDisplay), Added<WebViewDisplay>>,
     mut commands: Commands,
 ) {
     use raw_window_handle::RawWindowHandle;
     use raw_window_handle::HasWindowHandle;
     
-    for (entity, node, global, local, display) in webviews.iter_mut() {
+    for (entity, node, computed_node, global, local, display) in webviews.iter_mut() {
         #[cfg(feature="verbose")]
         tracing::debug!("Spawning WebViewDisplay controller!");
         
@@ -209,7 +209,7 @@ pub fn spawn_webview_controllers(
             let controller_clone = controller.clone();
             
             let address = display.address.clone().unwrap_or_default();
-            let rect = node.physical_rect(global, 1.5, 1.);
+            let rect = Rect::from_center_size(global.translation().truncate(), computed_node.size());
             
             #[cfg(all(feature="verbose", feature="inspect"))]
             tracing::debug!("Setting webview position to: {:#?}", rect);
@@ -262,7 +262,7 @@ pub fn sync_window_resize(
     windows: Query<(Entity, &Window), With<PrimaryWindow>>,
     winit_windows: NonSend<WinitWindows>,
     mut webview_provider: NonSendMut<WebViewProvider>,
-    mut webviews: Query<(Entity, &GlobalTransform, &Node, &mut WebViewDisplay)>,
+    mut webviews: Query<(Entity, &GlobalTransform, &Node, &ComputedNode, &mut WebViewDisplay)>,
     mut resize_evt: EventReader<WindowResized>,
     mut commands: Commands,
 ) {
@@ -272,7 +272,7 @@ pub fn sync_window_resize(
         use raw_window_handle::RawWindowHandle;
         use raw_window_handle::HasWindowHandle;
         
-        for (entity, transform, node, mut webview) in webviews.iter_mut() {
+        for (entity, transform, node, computed_node, mut webview) in webviews.iter_mut() {
             if let Ok((entity, window)) = windows.get_single() {
                 use winapi::shared::windef::HWND;
                 
@@ -294,7 +294,7 @@ pub fn sync_window_resize(
                 }
                 
                 if let Some(webview_controller) = webview_provider.controllers.get(&webview.uuid) {
-                    let rect = node.physical_rect(transform, 1.5, 1.);
+                    let rect = Rect::from_center_size(transform.translation().truncate(), computed_node.size());
                     
                     if let Some(controller_lock) = webview_controller.get() {
                         if let Err(error) = controller_lock.put_bounds(RECT {

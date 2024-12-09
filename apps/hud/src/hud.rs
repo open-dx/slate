@@ -70,7 +70,7 @@ impl Plugin for Hud {
         app.add_plugins(InputPlugin::new());
         
         app.init_asset::<Script>();
-        app.init_asset_loader::<ScriptLoader>();
+        // app.init_asset_loader::<ScriptLoader>();
         
         app.add_event::<WindowEvent>();
         
@@ -132,7 +132,7 @@ impl Hud {
     pub fn create_window(&self, title: &str, width: f32, height: f32) -> Window {
         Window {
             title: String::from(title),
-            mode: WindowMode::BorderlessFullscreen,
+            mode: WindowMode::BorderlessFullscreen(MonitorSelection::Current),
             resolution: WindowResolution::new(width, height),
             position: WindowPosition::Centered(MonitorSelection::Current),
             composite_alpha_mode: CompositeAlphaMode::PostMultiplied,
@@ -181,7 +181,7 @@ fn animate_light_direction(
         transform.rotation = Quat::from_euler(
             EulerRot::ZYX,
             0.0,
-            time.elapsed_seconds() * PI / 5.0,
+            time.elapsed_secs() * PI / 5.0,
             -FRAC_PI_4,
         );
     }

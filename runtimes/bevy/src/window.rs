@@ -47,8 +47,8 @@ impl WindowPlugin {
                 visible: true,
                 present_mode: PresentMode::AutoVsync,
                 mode: match kind {
-                    WindowKind::Overlay => WindowMode::BorderlessFullscreen,
-                    WindowKind::Wallpaper => WindowMode::BorderlessFullscreen,
+                    WindowKind::Overlay => WindowMode::BorderlessFullscreen(MonitorSelection::Current),
+                    WindowKind::Wallpaper => WindowMode::BorderlessFullscreen(MonitorSelection::Current),
                     _ => WindowMode::Windowed,
                 },
                 position: WindowPosition::Centered(MonitorSelection::Current),
@@ -130,7 +130,7 @@ pub fn bootstrap_new_windows(
     for entity in windows.iter_mut() {
         let mut child_window = Window {
             visible: false,
-            mode: WindowMode::BorderlessFullscreen,
+            mode: WindowMode::BorderlessFullscreen(MonitorSelection::Current),
             composite_alpha_mode: CompositeAlphaMode::Auto,
             transparent: true,
             ..Default::default()
@@ -312,7 +312,7 @@ pub fn toggle_fullscreen(
         if let Ok(mut window) = windows.get_single_mut() {
             match window.mode {
                 WindowMode::Windowed => {
-                    window.mode = WindowMode::BorderlessFullscreen;
+                    window.mode = WindowMode::BorderlessFullscreen(MonitorSelection::Current);
                 }
                 _ => {
                     window.mode = WindowMode::Windowed;

@@ -65,7 +65,7 @@ pub(crate) fn show_primary_window(
 pub(crate) fn spawn_ui_surface(
     mut commands: Commands,
 ) {
-    commands.spawn(Camera2dBundle::default());
+    commands.spawn(Camera2d);
     commands.spawn(WindowSurface::new());
     commands.spawn(DrawTimer::new(Duration::from_secs(2)));
 }

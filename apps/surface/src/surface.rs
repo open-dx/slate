@@ -1,6 +1,7 @@
 use std::num::NonZeroU8;
 use std::process::ExitCode;
 
+use bevy::prelude::ChildBuild as _;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 
@@ -20,7 +21,7 @@ use bevy::color::Alpha;
 use bevy::input::prelude::*;
 use bevy::input::keyboard::KeyboardInput;
 use bevy::math::prelude::*;
-use bevy::core_pipeline::core_2d::Camera2dBundle;
+use bevy::core_pipeline::core_2d::Camera2d;
 use bevy::gizmos::config::GizmoConfigStore;
 use bevy::gizmos::config::DefaultGizmoConfigGroup;
 use bevy::tasks::AsyncComputeTaskPool;
@@ -201,7 +202,7 @@ fn setup_cameras(
     mut commands: Commands,
 ) {
     if let Ok(_) = windows.get_single() {
-        commands.spawn((MainCamera, Camera2dBundle::default()));
+        commands.spawn((MainCamera, Camera2d));
     }
 }
 
@@ -574,22 +575,19 @@ impl SelectionMarquee {
 #[derive(Bundle, Default, Debug, Clone)]
 pub struct SelectionBoundaryBundle {
     /// TODO
-    pub node_bundle: NodeBundle,
+    pub node: Node,
 }
 
 impl SelectionBoundaryBundle {
     /// TODO
     pub fn new() -> Self {
         SelectionBoundaryBundle {
-            node_bundle: NodeBundle {
-                style: Style {
-                    position_type: PositionType::Absolute,
-                    top: Val::Px(0.0),
-                    left: Val::Px(0.0),
-                    right: Val::Px(0.0),
-                    bottom: Val::Px(0.0),
-                    ..Default::default()
-                },
+            node: Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(0.0),
+                left: Val::Px(0.0),
+                right: Val::Px(0.0),
+                bottom: Val::Px(0.0),
                 ..Default::default()
             },
         }
@@ -603,7 +601,15 @@ pub struct SelectionMarqueeBundle {
     pub marquee: SelectionMarquee,
     
     /// TODO
-    pub node_bundle: NodeBundle,
+    pub node: Node,
+    
+    pub background_color: BackgroundColor,
+    
+    pub border_color: BorderColor,
+    
+    pub focus_policy: FocusPolicy,
+    
+    pub z_index: ZIndex,
 }
 
 impl SelectionMarqueeBundle {
@@ -611,24 +617,22 @@ impl SelectionMarqueeBundle {
     pub fn new(color: Color, rect: Rect) -> Self {
         SelectionMarqueeBundle {
             marquee: SelectionMarquee::new(color),
-            node_bundle: NodeBundle {
-                style: Style {
-                    position_type: PositionType::Absolute,
-                    top: Val::Px(rect.min.y),
-                    left: Val::Px(rect.min.x),
-                    width: Val::Px(rect.max.x - rect.min.x),
-                    height: Val::Px(rect.max.y - rect.min.y),
-                    right: Val::Auto,
-                    bottom: Val::Auto,
-                    border:UiRect::all(Val::Px(1.5)),
-                    ..Default::default()
-                },
-                background_color: color.with_alpha(0.2).into(),
-                border_color: color.with_alpha(0.25).into(),
-                focus_policy: FocusPolicy::Pass,
-                z_index: ZIndex::Global(i32::MIN),
+            node: Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(rect.min.y),
+                left: Val::Px(rect.min.x),
+                width: Val::Px(rect.max.x - rect.min.x),
+                height: Val::Px(rect.max.y - rect.min.y),
+                right: Val::Auto,
+                bottom: Val::Auto,
+                border:UiRect::all(Val::Px(1.5)),
                 ..Default::default()
             },
+            background_color: color.with_alpha(0.2).into(),
+            border_color: color.with_alpha(0.25).into(),
+            focus_policy: FocusPolicy::Pass,
+            z_index: ZIndex(i32::MIN),
+            ..Default::default()
         }
     }
 }
@@ -637,7 +641,7 @@ impl SelectionMarqueeBundle {
 fn show_selection_marquee(
     mouse_btn: Res<ButtonInput<MouseButton>>,
     reticles: Query<&ReticlePosition, With<ReticleShape>>,
-    mut selection_marquee: Query<(Entity, &Parent, &mut Style), With<SelectionMarquee>>,
+    mut selection_marquee: Query<(Entity, &Parent, &mut Node), With<SelectionMarquee>>,
     mut active_selection: Local<SelectionState>,
     mut commands: Commands,
 ) {
@@ -661,19 +665,19 @@ fn show_selection_marquee(
         }
     } else if mouse_btn.pressed(MouseButton::Left) {
         // TODO: Modify the position of the show_selection_marquee marquee node.
-        if let Ok((_, parent, mut styles)) = selection_marquee.get_single_mut() {
+        if let Ok((_, parent, mut node)) = selection_marquee.get_single_mut() {
             // Are we working with the correct parent for the current show_selection_marquee marquee?
             if active_selection.bounds == Some(parent.get()) {
                 if let Ok(reticle_pos) = reticles.get_single() {
                     let start_pos = active_selection.start_pos.unwrap_or_default();
                     
                     // Set the top and left positions based on the minimum values
-                    styles.top = Val::Px(start_pos.y.min(reticle_pos.screen.y));
-                    styles.left = Val::Px(start_pos.x.min(reticle_pos.screen.x));
+                    node.top = Val::Px(start_pos.y.min(reticle_pos.screen.y));
+                    node.left = Val::Px(start_pos.x.min(reticle_pos.screen.x));
                     
                     // Calculate the new width and height based on the current mouse position
-                    styles.width = Val::Px((reticle_pos.screen.x - start_pos.x).abs());
-                    styles.height = Val::Px((reticle_pos.screen.y - start_pos.y).abs()); // Fixed this line
+                    node.width = Val::Px((reticle_pos.screen.x - start_pos.x).abs());
+                    node.height = Val::Px((reticle_pos.screen.y - start_pos.y).abs()); // Fixed this line
                 }
             }
         }
