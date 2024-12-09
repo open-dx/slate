@@ -29,31 +29,66 @@ pub mod layout {
 }
 
 pub mod content {
+    use crate::surface::Context;
+    use crate::element::Content;
+    use crate::element::DrawFn;
+
     use super::*;
     
     use alloc::string::String;
     
     #[derive(Default, Clone, Hash, Debug)]
-    pub struct TextBlock {
-        text: String,
+    pub struct TextBlock<'text> {
+        text: &'text str,
     }
     
-    impl TextBlock {
-        pub fn with_text<S: Into<String>>(mut self, value: S) -> Self {
+    impl<'text> TextBlock<'text> {
+        pub fn with_text<S: Into<&'text str>>(mut self, value: S) -> Self {
             self.text = value.into();
             self // etc.
         }
     }
     
-    impl Element for TextBlock {
-        fn content(&self) -> Option<&str> {
-            Some(self.text.as_ref())
+    impl Element for TextBlock<'_> {
+        fn content(&self) -> Option<Content<'_>> {
+            Some(Content::Text(self.text))
+        }
+    }
+    
+    //--
+    #[derive(Default, Clone, Hash, Debug)]
+    pub struct WebView {
+        address: String,
+    }
+    
+    impl WebView {
+        pub fn with_address<S: Into<String>>(mut self, value: S) -> Self {
+            self.address = value.into();
+            self // etc.
+        }
+    }
+    
+    impl Element for WebView {
+        fn content(&self) -> Option<Content<'_>> {
+            Some(Content::WebView(self.address.as_ref()))
+        }
+        
+        fn draw(&self, ctx: Context) -> DrawFn {
+            self.draw_mobile(ctx)
+        }
+    }
+    
+    impl WebView {
+        pub fn draw_mobile(&self, ctx: Context) -> DrawFn {
+            chizel::uix! {
+                //..
+            }
         }
     }
 }
 
 pub mod input {
-    use crate::element::DrawFn;
+    use crate::{element::DrawFn, surface::Context};
 
     use super::*;
 
@@ -89,7 +124,7 @@ pub mod input {
     }
     
     impl Element for Button {
-        fn draw(&self) -> DrawFn {
+        fn draw(&self, ctx: Context) -> DrawFn {
             // chizel::uix! {
             //     ^self {
             //         BackgroundColor::hex("#000000"),

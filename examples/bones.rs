@@ -5,6 +5,7 @@ use anyhow::Result;
 use slate::scaffold::Scaffold;
 use slate::element::tests::ElementTestImpl;
 use slate::event::ClickEvent;
+use slate::event::EventPin;
 
 //--
 /// A wimple example which builds a Scaffold from basic UIx markup.
@@ -26,7 +27,7 @@ fn main() -> Result<ExitCode> {
             
             chizel::uix! {
                 #[style(BackgroundColor::hex("#ff0000"))]
-                #[on(Click, on_click_fn)]
+                #[on(EventPin::Click(on_click_fn))]
                 <ElementTestImpl name="Outer">
                     <ElementTestImpl name="Inner" />
                 </ElementTestImpl>

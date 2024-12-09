@@ -11,16 +11,23 @@ use bevy::ecs::system::Commands;
 use bevy::ecs::system::Query;
 use bevy::hierarchy::BuildChildren;
 use bevy::hierarchy::ChildBuilder;
-use bevy::text::Font;
-use bevy::text::TextSection;
+use bevy::prelude::Image;
 use bevy::ui::prelude::*;
 use bevy::ui::FocusPolicy;
+use bevy::text::Font;
+use bevy::text::Text;
+use bevy::text::TextSection;
+use bevy::text::TextStyle;
 
+use slate::element::Content;
+use slate::event::EventPin;
+use slate::event::ClickEvent;
+use slate::style::property::FontFamily;
+use slate::style::property::FontSize;
 use slate::surface::Surface;
 use slate::surface::SurfaceUpdate;
 use slate::scaffold::Scaffold;
 use slate::scaffold::ScaffoldError;
-// use slate::element::Element;
 use slate::element::ElementNode;
 use slate::element::DrawReport;
 use slate::element::UUID;
@@ -29,13 +36,51 @@ use slate::style::primitive::Unit;
 use slate::style::property::ContentColor;
 use slate::collections::HashMap;
 
+use crate::webview::WebViewDisplay;
+
 /// Convenience type for unpacking a 2D size.
 struct Size2d(Val, Val);
+
+pub struct FontRegistry {
+    assets: Vec<Handle<Font>>,
+    index: HashMap<String, usize>,
+}
+
+impl FontRegistry {
+    pub fn new() -> Self {
+        FontRegistry {
+            assets: Vec::new(),
+            index: HashMap::new(),
+        }
+    }
+    
+    pub fn with_capacity(cap: usize) -> Self {
+        FontRegistry {
+            assets: Vec::with_capacity(cap),
+            index: HashMap::with_capacity(cap),
+        }
+    }
+}
+
+impl FontRegistry {
+    pub fn add(&mut self, family: &str, asset: Handle<Font>) -> &Self {
+        let idx = self.assets.len();
+        self.assets.push(asset);
+        self.index.insert(family.to_string(), idx);
+        self // etc..
+    }
+}
+
+impl FontRegistry {
+    pub fn get(&self, family: &str) -> Option<Handle<Font>> {
+        self.index.get(family).map(|f| self.assets[*f].clone_weak())
+    }
+}
 
 //---
 /// TODO
 #[derive(Component)]
-pub struct SurfaceProvider {
+pub struct WindowSurface {
     /// The surface that provides the scene/ui/whatever
     surface: Surface<'static>,
     
@@ -46,21 +91,21 @@ pub struct SurfaceProvider {
     entity_index: HashMap<UUID, Entity>,
     
     /// TODO: Make this a font asset manager.
-    font_asset: Handle<Font>,
+    font_assets: FontRegistry,
 }
 
-/// TODO
-#[derive(Component)]
-pub struct EntityMap(HashMap<UUID, Entity>);
-
-impl SurfaceProvider {
+impl WindowSurface {
+    const MIN_ENTITIES: usize = 1000;
+    
+    const MIN_FONTS: usize = 60;
+    
     /// TODO
     pub fn new() -> Self {
-        SurfaceProvider {
+        WindowSurface {
             surface: Surface::<'static>::new(),
             root_entity: None,
-            entity_index: HashMap::new(),
-            font_asset: Handle::default(),
+            entity_index: HashMap::with_capacity(Self::MIN_ENTITIES),
+            font_assets: FontRegistry::with_capacity(Self::MIN_FONTS),
         }
     }
     
@@ -71,25 +116,25 @@ impl SurfaceProvider {
     }
     
     /// TODO
-    pub fn with_font(mut self, font: Handle<Font>) -> Self {
-        self.font_asset = font;
+    pub fn with_font(mut self, family: &str, font: Handle<Font>) -> Self {
+        self.font_assets.add(family, font);
         self // etc..
     }
 }
 
-impl SurfaceProvider {
+impl WindowSurface {
     /// TODO
     pub fn from_surface(surface: Surface<'static>) -> Self {
-        SurfaceProvider {
+        WindowSurface {
             surface,
             root_entity: None,
-            entity_index: HashMap::new(),
-            font_asset: Handle::default(),
+            entity_index: HashMap::with_capacity(Self::MIN_ENTITIES),
+            font_assets: FontRegistry::with_capacity(Self::MIN_FONTS),
         }
     }
 }
 
-impl SurfaceProvider {
+impl WindowSurface {
     /// TODO
     pub fn surface(&self) -> &Surface<'static> {
         &self.surface
@@ -101,7 +146,7 @@ impl SurfaceProvider {
     }
 }
 
-impl Deref for SurfaceProvider {
+impl Deref for WindowSurface {
     type Target = Surface<'static>;
     
     /// TODO
@@ -110,14 +155,14 @@ impl Deref for SurfaceProvider {
     }
 }
 
-impl DerefMut for SurfaceProvider {
+impl DerefMut for WindowSurface {
     /// TODO
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.surface
     }
 }
 
-impl SurfaceProvider {
+impl WindowSurface {
     /// TODO
     pub fn draw<F>(&mut self, commands: &mut Commands, draw_fn: F)
     where
@@ -163,8 +208,12 @@ impl SurfaceProvider {
             return tracing::warn!("SurfaceProvider has no entity.");
         };
         
+        let filter: fn(&SurfaceUpdate) -> bool = |_| {
+            true // TODO
+        };
+        
         // TODO: Iterate over the vec of updates
-        for surface_update in surface_updates.drain(..).filter(|_| true) {
+        for surface_update in surface_updates.drain(..).filter(filter) {
             match surface_update {
                 SurfaceUpdate::Add(element_uuid) => {
                     // Ensure we're not adding a node that's already been
@@ -238,48 +287,53 @@ impl SurfaceProvider {
             return tracing::warn!("Can't find Element {:?} for rendering.", element_uuid);
         };
         
-        // TODO: Get the element's style from the surface.
-        let mut element_node = builder.spawn(ElementNodeBundle::from(element));
+        for event in element.events() {
+            match **event {
+                EventPin::Click(ev) => {
+                    ev(&ClickEvent);
+                }
+            }
+        }
         
-        if let Some(content) = element.content() {
-            element_node
+        // TODO: Get the element's style from the surface.
+        let mut element_node = ElementNodeBundle::from(element);
+        
+        let text = element_node.content.text.take().and_then(|mut text| {
+            if let Some(font_asset) = self.font_assets.get(&element_node.font_style.family) {
+                for section in &mut text.sections {
+                    section.style.font = font_asset.clone_weak();
+                    section.style.font_size = element_node.font_style.size;
+                }
+            }
+            Some(text)
+        });
+        
+        let webview_display = element_node.content.webview.take();
+        
+        #[cfg(all(feature="debug", feature="verbose", feature="inspect"))]
+        tracing::debug!("ElementNodeBundle:\n{:#?}", element_node);
+        
+        let mut element_node_entity = builder.spawn(element_node);
+        if let Some(text) = text {
+            element_node_entity
                 .with_children(|child_builder| {
                     child_builder.spawn((
+                        Interaction::default(),
                         TextBundle {
-                            text: bevy::text::Text {
-                                sections: vec![
-                                    TextSection {
-                                        value: String::from(content),
-                                        style: bevy::text::TextStyle {
-                                            font: self.font_asset.clone(),
-                                            font_size: 12.0,
-                                            color: Color::srgba(200., 200., 200., 1.),
-                                        }
-                                    },
-                                ],
-                                justify: bevy::text::JustifyText::Left,
-                                linebreak_behavior: bevy::text::BreakLineOn::WordBoundary,
-                                ..Default::default()
-                            },
+                            text,
                             ..Default::default()
-                        },
-                        // TODO: Upgrade to Bevy 0.15 ..
-                        // Node::default(),
-                        // Text::new(content),
-                        // TextColor(bevy::color::Color::srgb(0.8, 0.8, 0.8)),
-                        // bevy::prelude::TextFont {
-                        //     font: self.font_asset.clone(),
-                        //     font_size: 12.0,
-                        //     ..Default::default()
-                        // },
-                        // TextLayout::new_with_justify(JustifyText::Center),
-                        // AnimatedText,
+                        }
                     ));
                 });
         }
         
+        if let Some(webview_display) = webview_display {
+            element_node_entity
+                .insert(webview_display);
+        }
+        
         if let Some(element_children) = self.surface.get_children_of(&element_uuid) {
-            element_node
+            element_node_entity
                 .with_children(|child_builder| {
                     for child_element_node in element_children.into_iter() {
                         self.spawn_element_node(child_builder, &child_element_node.uuid(), consumed_updates);
@@ -287,7 +341,7 @@ impl SurfaceProvider {
                 });
         }
         
-        consumed_updates.insert(*element_uuid, element_node.id());
+        consumed_updates.insert(*element_uuid, element_node_entity.id());
         
         #[cfg(feature = "inspect")]
         tracing::trace!("Spawned Element#{:?} at Node {:?}", element_uuid, element_entity.id());
@@ -339,7 +393,7 @@ impl From<&Surface<'_>> for SurfaceNodeBundle {
 //---
 /// TODO
 pub(crate) fn setup_new_surface(
-    mut surface_query: Query<(Entity, &mut SurfaceProvider), Added<SurfaceProvider>>,
+    mut surface_query: Query<(Entity, &mut WindowSurface), Added<WindowSurface>>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
@@ -348,7 +402,14 @@ pub(crate) fn setup_new_surface(
         
         surface_cmds.insert(SurfaceNodeBundle::from(surface_provider.surface()));
         surface_provider.root_entity = Some(surface_entity);
-        surface_provider.font_asset = asset_server.load("fonts/FiraMono-Medium.ttf");
+        surface_provider.font_assets.add("FiraMono-Medium", asset_server.load("fonts/FiraMono-Medium.ttf"));
+        surface_provider.font_assets.add("FiraSans-Bold", asset_server.load("fonts/FiraSans-Bold.ttf"));
+        surface_provider.font_assets.add("fa-regular-400", asset_server.load("fonts/fa-regular-400.ttf"));
+        surface_provider.font_assets.add("fa-solid-900", asset_server.load("fonts/fa-solid-900.ttf"));
+        surface_provider.font_assets.add("Montserrat-Medium", asset_server.load("fonts/Montserrat/Montserrat-Medium.ttf"));
+        surface_provider.font_assets.add("Montserrat-Regular", asset_server.load("fonts/Montserrat/Montserrat-Regular.ttf"));
+        surface_provider.font_assets.add("Montserrat-Light", asset_server.load("fonts/Montserrat/Montserrat-Light.ttf"));
+        surface_provider.font_assets.add("Montserrat-SemiBold", asset_server.load("fonts/Montserrat/Montserrat-SemiBold.ttf"));
         
         tracing::trace!("Surface `{:?}` changed ..", surface_entity);
     }
@@ -381,9 +442,26 @@ impl core::fmt::Debug for ElementNodeHandle {
     }
 }
 
-#[derive(Bundle, Default)]
+#[derive(Component, Default, Debug)]
+pub struct ElementContent {
+    text: Option<Text>,
+    image: Option<Image>,
+    video: Option<[Image; 32]>, // lol ..
+    webview: Option<WebViewDisplay>,
+}
+
+#[derive(Component, Default, Debug)]
+pub struct ElementFontStyle {
+    pub family: String,
+    pub size: f32,
+    pub color: Color,
+}
+
+#[derive(Bundle, Default, Debug)]
 pub struct ElementNodeBundle {
     node: NodeBundle,
+    content: ElementContent,
+    font_style: ElementFontStyle,
     handle: ElementNodeHandle,
     // background_color: BackgroundColor,
     // border_color: BorderColor,
@@ -400,10 +478,10 @@ impl ElementNodeBundle {
 }
 
 impl From<&ElementNode<'_>> for ElementNodeBundle {
-    fn from(element_node: &ElementNode<'_>) -> Self {
-        let mut bundle = ElementNodeBundle::new(element_node.uuid());
+    fn from(element: &ElementNode<'_>) -> Self {
+        let mut bundle = ElementNodeBundle::new(element.uuid());
         
-        for (_style_type_id, styles) in element_node.stylesheet().styles() {
+        for (_style_type_id, styles) in element.stylesheet().styles() {
             #[cfg(feature = "inspect")]
             tracing::trace!("Style TypeId: {:?}", _style_type_id);
             
@@ -415,7 +493,44 @@ impl From<&ElementNode<'_>> for ElementNodeBundle {
             }
         }
         
+        bundle.apply_content(element);
+        
         bundle
+    }
+}
+
+impl ElementNodeBundle {
+    pub fn apply_content(&mut self, element: &ElementNode<'_>) {
+        match element.content() {
+            Some(Content::Text(content)) => {
+                self.content.text = Some(Text {
+                    sections: vec![
+                        TextSection {
+                            value: String::from(content),
+                            style: TextStyle {
+                                font: Handle::default(),
+                                font_size: self.font_style.size,
+                                color: self.font_style.color,
+                            },
+                        },
+                    ],
+                    justify: bevy::text::JustifyText::Left,
+                    linebreak_behavior: bevy::text::BreakLineOn::AnyCharacter,
+                });
+            },
+            Some(Content::WebView(address)) => {
+                tracing::debug!("Found Webview with address {:?} ..", address);
+                if let Ok(display) = WebViewDisplay::new().with_address(address) {
+                    self.content.webview = Some(display);
+                }
+            },
+            Some(Content::Image(_)) => {
+                tracing::debug!("TODO: Image content for ElementNodeBundle");
+            },
+            None => {
+                // Zzzz ..
+            },
+        };
     }
 }
 
@@ -450,10 +565,12 @@ impl ElementNodeBundle {
             StyleValue::MinHeight(min_height) => Self::apply_unit(min_height, &mut self.node.style.min_height),
             StyleValue::MaxWidth(max_width) => Self::apply_unit(max_width, &mut self.node.style.max_width),
             StyleValue::MaxHeight(max_height) => Self::apply_unit(max_height, &mut self.node.style.max_height),
+            StyleValue::FontFamily(family) => self.apply_font_family(family),
+            StyleValue::FontSize(size) => self.apply_font_size(size),
+            StyleValue::ContentColor(color) => self.apply_text_color(color),
             StyleValue::BorderWeight(weight) => self.apply_border_weight(weight),
             StyleValue::BorderRadius(radius) => Self::apply_border_radius(radius, &mut self.node.border_radius),
             StyleValue::BorderColor(color) => Self::apply_border_color(color, &mut self.node.border_color),
-            StyleValue::ContentColor(color) => Self::apply_content_color(color, &mut self.node.style),
             #[cfg(feature = "dev")]
             _ => {
                 tracing::warn!("Skipping unsupported style: {:?}", style_value);
@@ -461,8 +578,22 @@ impl ElementNodeBundle {
         }
     }
     
-    fn apply_content_color(color: &ContentColor, target: &mut Style) {
-        
+    fn apply_font_family(&mut self, font_family: &FontFamily) {
+        self.font_style.family = font_family.name().to_owned();
+    }
+    
+    fn apply_font_size(&mut self, size: &FontSize) {
+        self.font_style.size = match size.unit() {
+            Unit::Px(pixels) => *pixels,
+            _ => {
+                tracing::warn!("unsupported font size '{:?}'", size);
+                14.0 // TODO: Get a default size from the styleguide ..
+            },
+        };
+    }
+    
+    fn apply_text_color(&mut self, color: &ContentColor) {
+        self.font_style.color = unpack_color(&color);
     }
     
     //--

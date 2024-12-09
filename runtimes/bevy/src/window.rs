@@ -9,11 +9,17 @@ use bevy::ecs::prelude::*;
 use bevy::input::ButtonInput;
 use bevy::input::prelude::KeyCode;
 
+use bevy::winit::WakeUp;
 use bevy::winit::WinitPlugin;
 use bevy::winit::WinitWindows;
 
 use bevy::color::Color;
 use bevy::render::camera::ClearColor;
+use raw_window_handle::HasWindowHandle;
+use winit::event_loop::ActiveEventLoop;
+use winit::event_loop::EventLoop;
+use winit::platform::windows::WindowAttributesExtWindows;
+use winit::window::WindowId;
 
 //---
 /// TODO
@@ -90,6 +96,7 @@ impl WindowPlugin {
 impl Plugin for WindowPlugin {
     /// TODO
     fn build(&self, app: &mut App) {
+        
         app.insert_resource(ClearColor(Color::srgb(0.09, 0.09, 0.09)));
         
         app.add_plugins(bevy::window::WindowPlugin {
@@ -102,10 +109,142 @@ impl Plugin for WindowPlugin {
         
         app.add_event::<WindowEvent>();
         
+        app.add_systems(bevy::app::Update, bootstrap_new_windows);
+        app.add_systems(bevy::app::Update, pair_parent_child_windows);
         app.add_systems(bevy::app::Update, route_window_events);
         app.add_systems(bevy::app::Update, toggle_fullscreen);
         app.add_systems(bevy::app::Update, toggle_decorations);
     }
+}
+
+#[derive(Component)]
+pub struct ChildWindow {
+    parent: Entity,
+}
+
+/// TODO
+pub fn bootstrap_new_windows(
+    mut windows: Query<Entity, (Added<Window>, Without<ChildWindow>)>,
+    mut commands: Commands,
+) {
+    for entity in windows.iter_mut() {
+        let mut child_window = Window {
+            visible: false,
+            mode: WindowMode::BorderlessFullscreen,
+            composite_alpha_mode: CompositeAlphaMode::Auto,
+            transparent: true,
+            ..Default::default()
+        };
+        
+        child_window.set_maximized(true);
+        
+        commands.spawn(child_window).insert(ChildWindow { parent: entity });
+    }
+}
+
+/// TODO
+pub fn pair_parent_child_windows(
+    mut windows: Query<(Entity, &ChildWindow), Added<ChildWindow>>,
+    winit_windows: NonSend<WinitWindows>,
+) {
+    for (child_entity, ChildWindow { parent: parent_entity }) in windows.iter_mut() {
+        let Some(mut child_window) = winit_windows.get_window(child_entity) else {
+            return tracing::warn!("Couldn't get child window for entity#{:}", child_entity)
+        };
+        
+        let Ok(child_handle) = child_window.window_handle().map_err(capture) else {
+            return tracing::warn!("Failed to get child window handle!");
+        };
+        
+        let Some(parent_window) = winit_windows.get_window(*parent_entity) else {
+            return tracing::warn!("Couldn't get parent window for entity#{:}", child_entity)
+        };
+        
+        let Ok(parent_handle) = parent_window.window_handle().map_err(capture) else {
+            return tracing::warn!("Failed to get parent window handle!");
+        };
+        
+        #[cfg(target_os = "windows")] {
+            use raw_window_handle::RawWindowHandle;
+            use winapi::um::winuser::SetParent;
+            use winapi::shared::windef::HWND;
+            
+            let RawWindowHandle::Win32(win32_child_handle) = child_handle.as_raw() else {
+                return tracing::error!("Failed to get raw window handle!");
+            };
+            
+            let RawWindowHandle::Win32(win32_parent_handle) = parent_handle.as_raw() else {
+                return tracing::error!("Failed to get raw window handle!");
+            };
+            
+            let child_hwnd: HWND = win32_child_handle.hwnd.get() as HWND;
+            let parent_hwnd: HWND = win32_parent_handle.hwnd.get() as HWND;
+            
+            unsafe {
+                SetParent(child_hwnd, parent_hwnd);
+                child_window.set_visible(true);
+                tracing::debug!("Paired window parent {:?} to child {:?}!", parent_hwnd, child_hwnd)
+            }
+        }
+        
+        #[cfg(target_os = "macos")] {
+            // TODO
+        }
+        
+        #[cfg(target_os = "linux")] {
+            // TODO
+        }
+    }
+}
+
+/// TODO
+pub fn bootstrap_child_windows(
+    mut windows: Query<(Entity, &ChildWindow), Added<ChildWindow>>,
+    winit_windows: NonSend<WinitWindows>,
+) {
+    for (child_entity, child_window) in windows.iter_mut() {
+        let Some(parent_window) = winit_windows.get_window(child_window.parent) else {
+            return tracing::warn!("Couldn't get parent window for entity#{:}", child_entity)
+        };
+        
+        let Ok(handle) = parent_window.window_handle().map_err(capture) else {
+            return tracing::warn!("Failed to get parent window handle!");
+        };
+        
+        let child_window_attrs = unsafe {
+            create_child_window_attributes(parent_window)
+                .with_parent_window(Some(handle.as_raw()))
+                // .with_owner_window(parent)
+        };
+        
+        tracing::debug!("Creating new child window with attributes: {:#?}", child_window_attrs);
+    }
+}
+
+fn create_child_window_attributes(parent_window: &winit::window::Window) -> winit::window::WindowAttributes {
+    let parent_position = parent_window.outer_position().unwrap_or(dpi::PhysicalPosition::default());
+    let parent_size = parent_window.outer_size();
+
+    let child_x = parent_position.x + 10; // Slight offset
+    let child_y = parent_position.y + 10; // Slight offset
+    
+    unsafe {
+        winit::window::Window::default_attributes()
+            .with_position(dpi::LogicalPosition::new(child_x, child_y))
+            .with_window_level(winit::window::WindowLevel::AlwaysOnTop)
+            .with_active(true)
+            .with_visible(true)
+            .with_inner_size(parent_size)
+            .with_maximized(true)
+            .with_cursor(winit::window::CursorIcon::Grab)
+            // .with_title_background_color(None)
+            // .with_title_text_color(None)
+            .with_title("Child Window")
+    }
+}
+
+fn capture<E: std::error::Error>(error: E) {
+    tracing::error!("Welp: {:}", error);
 }
 
 /// TODO

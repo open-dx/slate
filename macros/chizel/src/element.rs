@@ -146,17 +146,12 @@ impl ElementDeriveBuilder {
 /// - Slot `0` is the event name, as in `Click`.
 /// - Slot `1` is the event handler function, as in `fn click_handler_fn(..)`.
 #[derive(Debug, Clone, PartialEq)]
-pub struct ElementEventAttribute(Expr, Vec<Expr>);
+pub struct ElementEventAttribute(Expr);
 
 impl ElementEventAttribute {
     /// TODO
-    pub fn kind(&self) -> &Expr {
+    pub fn handler(&self) -> &Expr {
         &self.0
-    }
-    
-    /// TODO
-    pub fn handlers(&self) -> &Vec<Expr> {
-        &self.1
     }
 }
 
@@ -185,10 +180,7 @@ impl TryFrom<&MetaList> for ElementEventAttribute {
             return Err(Error::new_spanned(meta_list, "Expected event name"));
         };
         
-        // Extract addtional event handlers (optional).
-        let other_exprs = punctuated.iter().skip(1).cloned().collect::<Vec<_>>();
-        
-        Ok(ElementEventAttribute(first_expr, other_exprs))
+        Ok(ElementEventAttribute(first_expr))
     }
 }
 

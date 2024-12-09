@@ -5,7 +5,6 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 
-// use tracing::log::LevelFilter;
 use tracing::log;
 
 use smallvec::SmallVec;
@@ -13,32 +12,22 @@ use smallvec::SmallVec;
 use crossterm::event::KeyModifiers;
 use crossterm::event::Event as BackendEvent;
 use crossterm::event::KeyCode as TerminalKeyCode;
-
-use crossterm::terminal::EnterAlternateScreen;
-use crossterm::terminal::LeaveAlternateScreen;
-
 use crossterm::event::EnableMouseCapture;
 use crossterm::event::DisableMouseCapture;
-
+use crossterm::terminal::EnterAlternateScreen;
+use crossterm::terminal::LeaveAlternateScreen;
 use crossterm::execute;
 
 //--
 use ratatui::Terminal;
-
 use ratatui::Frame;
 use ratatui::CompletedFrame;
-
 use ratatui::backend::CrosstermBackend;
-
 use ratatui::layout::Layout;
 use ratatui::layout::Constraint;
 use ratatui::layout::Direction;
 use ratatui::layout::Rect;
-// use ratatui::layout::Alignment::*;
-
-// use ratatui::style::Style as TerminalStyle;
 use ratatui::style::Color::*;
-
 use ratatui::widgets::Widget;
 use ratatui::widgets::Block;
 use ratatui::widgets::Padding;
@@ -47,26 +36,15 @@ use ratatui::widgets::Borders;
 use ratatui::widgets::Wrap;
 use ratatui::widgets::Tabs;
 use ratatui::widgets::BorderType::*;
-// use ratatui::widgets::Widget;
-
 use ratatui::symbols::DOT;
-
 use ratatui::text::Line;
-// use ratatui::text::Text;
-
-// use tui_textarea::TextArea;
-// use tui_textarea::Input as TextAreaInput;
-// use tui_textarea::Key as TextAreaKey;
 
 use bevy::app::prelude::*;
 use bevy::app::AppExit;
-
 use bevy::ecs::prelude::*;
-
 use bevy::input::prelude::*;
 use bevy::input::ButtonState;
 use bevy::input::keyboard::KeyboardInput;
-
 use bevy::window::prelude::*;
 
 //---

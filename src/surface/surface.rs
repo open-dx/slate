@@ -283,11 +283,7 @@ impl<'surface> Surface<'surface> {
                 element_node.set_hash(scaffold.hash().ok_or(ScaffoldError::HashMissing)?);
                 
                 element_node.stylesheet_mut().extend(scaffold.stylesheet_mut());
-                // for (kind, styles) in scaffold.stylesheet_mut().drain().into_iter() {
-                //     for style in styles.iter() {
-                //         element_node.stylesheet_mut().push(style.into());
-                //     }
-                // }
+                element_node.take_events(scaffold.events_mut());
                 
                 let element_uuid = element_node.uuid();
                 let element_index = self.add_node(element_node)?;

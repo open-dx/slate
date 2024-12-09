@@ -10,14 +10,17 @@ use alloc::vec::Vec;
 
 use ahash::AHasher;
 
+use crate::element::Content;
 use crate::element::Element;
 use crate::element::ElementError;
 use crate::element::ElementNode;
 // use crate::element::DrawFn;
 use crate::element::UUID;
+use crate::event::ClickEvent;
 use crate::event::Event;
-use crate::event::EventKind;
+use crate::event::EventPin;
 use crate::event::EventHandlerFn;
+use crate::event::EventStack;
 use crate::style::StyleSheet;
 // use crate::style::StyleProperty;
 use crate::style::Style;
@@ -26,6 +29,7 @@ use crate::style::Style;
 
 #[cfg(feature = "bump")]
 use crate::arena::Bump;
+use crate::surface::Context;
 
 //---
 /// A lightweight single-pass builder for a tree of Element nodes.
@@ -49,15 +53,8 @@ pub struct Scaffold<'arena> {
     /// The node currently being built.
     element: Option<(&'arena dyn Element, Layout)>,
     
-    /// The node currently being built.
-    #[cfg(not(feature = "bump"))]
-    element: Option<(Box<dyn Element + 'arena>, Layout)>,
-    
     /// The built stylesheet for this node.
     stylesheet: StyleSheet<'arena>,
-    
-    /// TODO
-    content: Option<alloc::string::String>,
     
     /// TODO
     #[cfg(feature = "bump")]
@@ -75,6 +72,9 @@ pub struct Scaffold<'arena> {
     #[cfg(not(feature = "bump"))]
     children: Vec<Scaffold<'arena>>,
     
+    /// TODO
+    events: EventStack<'arena>,
+    
     /// The state of the hash after the last calculation.
     hash: Option<u64>,
     
@@ -87,31 +87,31 @@ pub struct Scaffold<'arena> {
 }
 
 impl<'arena> Scaffold<'arena> {
-    #[cfg(not(feature = "bump"))]
-    pub fn new() -> Self {
-        Scaffold {
-            element: None,
-            stylesheet: StyleSheet::new(),
-            content: None,
-            slots: Vec::new(),
-            children: Vec::new(),
-            hasher: AHasher::default(),
-            hash: None,
-        }
-    }
-    
     /// Create a new Scaffold from a given Element.
     #[cfg(feature = "bump")]
     pub fn new_in(arena: &'arena Bump) -> Self {
         Scaffold {
             element: None,
             stylesheet: StyleSheet::new_in(arena),
-            content: None,
             slots: Vec::new_in(arena),
             children: Vec::new_in(arena),
+            events: EventStack::new_in(arena),
             hasher: AHasher::default(),
             hash: None,
             arena,
+        }
+    }
+    
+    #[cfg(not(feature = "bump"))]
+    pub fn new() -> Self {
+        Scaffold {
+            element: None,
+            stylesheet: StyleSheet::new(),
+            slots: Vec::new(),
+            children: Vec::new(),
+            events: EventStack::new(),
+            hasher: AHasher::default(),
+            hash: None,
         }
     }
     
@@ -120,7 +120,6 @@ impl<'arena> Scaffold<'arena> {
     pub fn with_element<E: Element + Hash + 'arena>(mut self, mut element: E) -> Self {
         let element = self.arena.alloc(element);
         element.hash(&mut self.hasher);
-        
         self.element = Some((element, Layout::new::<E>()));
         self // etc..
     }
@@ -130,7 +129,6 @@ impl<'arena> Scaffold<'arena> {
     pub fn with_element<E: Element + Hash + 'arena>(mut self, mut element: E) -> Self {
         let element = Box::new(element);
         element.hash(&mut self.hasher);
-        
         self.element = Some((element, Layout::new::<E>()));
         self // etc..
     }
@@ -158,11 +156,6 @@ impl<'arena> Scaffold<'arena> {
     pub fn get_element(&self) -> Option<&dyn Element> {
         self.element.as_ref().map(|element| &*element.0)
     }
-    
-    // /// Provides immutable access to the element node of this Scaffold.
-    // pub fn get_element_mut(&mut self) -> Option<&mut dyn Element> {
-    //     self.element.as_mut().map(|e| *e)
-    // }
     
     /// TODO
     pub fn take_element_boxed(&mut self) -> Option<Box<dyn Element>> {
@@ -193,14 +186,39 @@ impl<'arena> Scaffold<'arena> {
     }
     
     /// TODO
-    pub fn content(&self) -> Option<&str> {
+    pub fn content(&self) -> Option<Content<'_>> {
         self.get_element().as_ref().and_then(|e| e.content())
+    }
+    
+    //--
+    /// Provides immutable access to the events of this Scaffold.
+    #[cfg(feature = "bump")]
+    pub fn events(&self) -> &Vec<Box<EventPin, &'arena Bump>, &'arena Bump> {
+        self.events.as_ref()
+    }
+    
+    /// Provides immutable access to the events of this Scaffold.
+    #[cfg(not(feature = "bump"))]
+    pub fn events(&self) -> &Vec<Box<EventPin>> {
+        self.events.as_ref()
+    }
+    
+    /// Provides mutable access to the events of this Scaffold.
+    #[cfg(feature = "bump")]
+    pub fn events_mut(&mut self) -> &mut Vec<Box<EventPin, &'arena Bump>, &'arena Bump> {
+        self.events.as_mut()
+    }
+    
+    /// Provides mutable access to the events of this Scaffold.
+    #[cfg(not(feature = "bump"))]
+    pub fn events_mut(&mut self) -> &mut Vec<Box<EventPin>> {
+        self.events.as_mut()
     }
     
     //--
     /// Provides immutable access to the children of this Scaffold.
     #[cfg(feature = "bump")]
-    pub fn children(&self) -> &Vec<Scaffold<'_>, &'arena Bump> {
+    pub fn children(&self) -> &Vec<Scaffold<'arena>, &'arena Bump> {
         self.children.as_ref()
     }
     
@@ -243,8 +261,8 @@ impl<'arena> Scaffold<'arena> {
     }
     
     /// TODO
-    pub fn with_event_attr<E: Event>(&mut self, event_kind: EventKind, _event_fn: EventHandlerFn<E>) -> Result<&mut Self, ScaffoldError> {
-        tracing::warn!("TODO: #[event({:?}, ..)]", event_kind);
+    pub fn with_event_attr(&mut self, event_pin: EventPin) -> Result<&mut Self, ScaffoldError> {
+        self.events.push(Box::new_in(event_pin, self.arena));
         Ok(self) // etc..
     }
     
@@ -269,9 +287,10 @@ impl<'arena> Scaffold<'arena> {
         Ok(self)
     }
     
+    /// TODO
     pub fn build(&mut self) -> Result<&mut Self, ScaffoldError> {
         if let Some(ref element) = self.get_element() {
-            element.draw()(self)?;
+            element.draw(Context::new_in(self.arena))(self)?;
         }
         
         self.hash = Some(self.hasher.finish());

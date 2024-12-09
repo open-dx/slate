@@ -5,6 +5,8 @@ use core::fmt::Debug;
 // use alloc::vec::Vec;
 // use alloc::format;
 
+use alloc::string::String;
+
 use crate::style::Style;
 use crate::style::StyleValue;
 // use crate::style::primitive::Weight;
@@ -221,6 +223,35 @@ pub struct Gap(Unit<f32>);
 /// TODO
 #[derive(chalk::Color, Default, Copy, Clone, Debug, PartialEq)]
 pub struct BackgroundColor(Color);
+
+/// TODO
+#[derive(Default, Clone, Debug, PartialEq)]
+pub struct FontFamily(String);
+
+impl FontFamily {
+    pub fn new(family: &str) -> Self {
+        FontFamily(String::from(family))
+    }
+    
+    pub fn name(&self) -> &str {
+        self.0.as_ref()
+    }
+}
+
+impl Into<StyleValue> for FontFamily {
+    /// TODO
+    fn into(self) -> StyleValue {
+        StyleValue::FontFamily(self)
+    }
+}
+
+impl Style for FontFamily {
+    //..
+}
+
+/// TODO
+#[derive(chalk::Unit, Default, Clone, Copy, Debug, PartialEq)]
+pub struct FontSize(Unit<f32>);
 
 /// TODO
 #[derive(chalk::Color, Default, Copy, Clone, Debug, PartialEq)]

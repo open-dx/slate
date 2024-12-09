@@ -10,7 +10,7 @@ use syn::parse_macro_input;
 // use syn::parse_quote;
 
 #[proc_macro_derive(StyleProperty)]
-pub fn asdf_style_property(input: TokenStream) -> TokenStream {
+pub fn derive_style_property(input: TokenStream) -> TokenStream {
     let _ast = parse_macro_input!(input as DeriveInput);
     // TODO: Generate code for new typemap feature
     let gen = quote! {
@@ -20,7 +20,7 @@ pub fn asdf_style_property(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_derive(Unit)]
-pub fn asdf_unit(input: TokenStream) -> TokenStream {
+pub fn derive_unit(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     let name = &ast.ident;
     

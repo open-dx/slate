@@ -20,6 +20,16 @@ use crate::collections::Drain;
 use crate::style::property::*;
 
 //---
+// TODO: Experiment with v2 syntax:
+// let style = Margin::<0, 0, 0, 0>;
+// struct Margin<
+//     const TOP: u8=0,
+//     const RIGHT: u8=0,
+//     const BOTTOM: u8=0,
+//     const LEFT: u8=0,
+// >;
+
+//---
 /// TODO
 // #[derive(Debug)]
 #[cfg(not(feature = "bump"))]
@@ -64,14 +74,6 @@ impl<'ctx> StyleSheet<'ctx> {
         }
     }
 }
-
-// impl core::fmt::Debug for StyleSheet<'_> {
-//     /// TODO
-//     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-//         let mut struct_fmt = f.debug_struct("StyleSheet");
-//         struct_fmt.finish()
-//     }
-// }
 
 #[cfg(not(feature = "bump"))]
 impl<'ctx> StyleSheet<'ctx> {
@@ -231,6 +233,8 @@ pub enum StyleValue {
     MinHeight(MinHeight),
     MaxWidth(MaxWidth),
     MaxHeight(MaxHeight),
+    FontFamily(FontFamily),
+    FontSize(FontSize),
     ContentColor(ContentColor),
     BorderWeight(BorderWeight),
     BorderRadius(BorderRadius),
@@ -264,6 +268,8 @@ impl core::fmt::Debug for StyleValue {
             StyleValue::MinHeight(value) => write!(f, "{:?}", value),
             StyleValue::MaxWidth(value) => write!(f, "{:?}", value),
             StyleValue::MaxHeight(value) => write!(f, "{:?}", value),
+            StyleValue::FontFamily(value) => write!(f, "{:?}", value),
+            StyleValue::FontSize(value) => write!(f, "{:?}", value),
             StyleValue::ContentColor(value) => write!(f, "{:?}", value),
             StyleValue::BorderWeight(value) => write!(f, "{:?}", value),
             StyleValue::BorderRadius(value) => write!(f, "{:?}", value),

@@ -10,8 +10,6 @@ extern crate bevy;
 // extern crate bevy_mod_picking;
 // pub extern crate bevy_eventlistener as events;
 
-pub extern crate webview2 as webview;
-
 //--
 mod plugin;
 pub use plugin::*;
@@ -20,12 +18,14 @@ pub mod config;
 
 pub mod provider;
 
-pub mod window;
-
 #[cfg(feature = "terminal")]
 pub mod terminal;
 
-// pub mod picking;
+pub mod window;
+
+pub mod webview;
+
+pub mod input;
 
 pub mod reticle;
 

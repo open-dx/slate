@@ -40,11 +40,13 @@ pub fn uix(token_buf: proc_macro::TokenStream) -> proc_macro::TokenStream {
                     use slate::style::primitive::*;
                     use slate::style::primitive::Unit::*;
                     use slate::style::property::*;
-                    use slate::event::EventKind::*;
+                    use slate::event::EventPin::*;
                     
                     // Some complex types require encapsulation in braces, parens, etc.
                     // Allow a subset of these for convenience.
                     #[allow(unnecessary_braces)]
+                    #[allow(unused_braces)]
+                    #[allow(unused_parens)]
                     move |scaffold| {
                         #uix_block
                         Ok(())

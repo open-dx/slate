@@ -441,12 +441,10 @@ impl ToTokens for UIxElement {
         // Construct `.with_event(..)` calls for each event.
         let mut events = proc_macro2::TokenStream::new();
         for event in &self.events {
-            let event_kind = event.kind();
-            for event_handler in event.handlers() {
-                events.extend(quote! {
-                    .with_event_attr(#event_kind, #event_handler)?
-                });
-            }
+            let event_handler = event.handler();
+            events.extend(quote! {
+                .with_event_attr(#event_handler)?
+            });
         }
         
         // Construct `.with_style(..)` calls for each style.

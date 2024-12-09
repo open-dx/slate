@@ -65,6 +65,7 @@ ahash = { version = "0.8", default-features = false }
 # Used by the stylesheet implementation for
 # faster(?) dynamic dispatch of style properties.
 enum_dispatch = { version = "0.3" }
+winit = "0.30.5"
 
 #--
 [dependencies.chizel]

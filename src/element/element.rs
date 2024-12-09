@@ -3,7 +3,9 @@ use core::fmt::Debug;
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
+use bumpalo::Bump;
 
+use crate::surface::Context;
 // use crate::surface::SurfaceError;
 use crate::surface::SurfaceUpdate;
 use crate::scaffold::Scaffold;
@@ -12,10 +14,17 @@ use crate::scaffold::ScaffoldError;
 // use crate::style::StyleProperty;
 use crate::style::StyleSheet;
 use crate::style::StyleSheet2;
+use crate::event::EventPin;
 
 //---
 // Re-export the Element derive macro so it's available with the Element trait.
 pub use chizel::Element;
+
+pub enum Content<'content> {
+    Text(&'content str),
+    Image(&'content [u8]),
+    WebView(&'content str),
+}
 
 /// Represents an item that can be drawn on a Surface.
 pub trait Element: Send + Sync + Debug {
@@ -32,13 +41,13 @@ pub trait Element: Send + Sync + Debug {
     }
     
     /// TODO
-    fn content(&self) -> Option<&str> {
+    fn content(&self) -> Option<Content> {
         None
     }
     
     /// TODO
     #[inline(always)]
-    fn draw(&self) -> DrawFn {
+    fn draw(&self, ctx: Context) -> DrawFn {
         #[inline(always)]
         |_| Ok(())
     }
@@ -60,7 +69,9 @@ pub struct UXID(UUID);
 /// Style preference for working with UUIDs internally.
 pub use uuid::Uuid as UUID;
 
-impl ElementIndex for UUID {}
+impl ElementIndex for UUID {
+    //..
+}
 
 //---
 /// Wraps an ElementNode in the Scaffold'surface node graph.
@@ -71,6 +82,9 @@ pub struct ElementNode<'element> {
     
     /// The inner element stored in a Scaffold'surface Element graph.
     element: Option<Box<dyn Element + 'element>>,
+    
+    /// The parent node of this node.
+    events: Vec<Box<EventPin>>,
     
     /// The parent node of this node.
     stylesheet: StyleSheet2<'element>,
@@ -99,6 +113,7 @@ impl<'element> ElementNode<'element> {
         ElementNode {
             uuid,
             element,
+            events: Vec::new(),
             stylesheet: StyleSheet2::new(),
             hash: 0,
         }
@@ -141,6 +156,20 @@ impl<'element> ElementNode<'element> {
     }
     
     /// TODO
+    pub fn events(&self) -> &Vec<Box<EventPin>> {
+        self.events.as_ref()
+    }
+    
+    /// TODO
+    pub fn events_mut(&mut self) -> &mut Vec<Box<EventPin>> {
+        self.events.as_mut()
+    }
+    
+    pub fn take_events(&mut self, other: &mut Vec<Box<EventPin, &Bump>, &Bump>) {
+        self.events.extend(other.drain(..).map(|e| Box::new(*e)));
+    }
+    
+    /// TODO
     pub fn set_element(&mut self, element: Option<Box<dyn Element + 'element>>) {
         self.element = element;
     }
@@ -151,7 +180,7 @@ impl<'element> ElementNode<'element> {
     }
     
     /// TODO
-    pub fn content(&self) -> Option<&str> {
+    pub fn content(&self) -> Option<Content<'_>> {
         self.element.as_ref().and_then(|e| e.content())
     }
     
