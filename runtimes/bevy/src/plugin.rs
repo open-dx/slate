@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use bevy::app::PostUpdate;
+use bevy::app::Update;
 use bevy::window::WindowMode;
 use bevy::DefaultPlugins;
 use bevy::app::App;
@@ -102,7 +103,7 @@ impl BevySlatePlugin {
             visible: true,
             resizable: true,
             position: bevy::window::WindowPosition::Centered(bevy::window::MonitorSelection::Current),
-            composite_alpha_mode: bevy::window::CompositeAlphaMode::Auto,
+            composite_alpha_mode: bevy::window::CompositeAlphaMode::Opaque,
             window_level: WindowLevel::Normal,
             ..Default::default()
         }

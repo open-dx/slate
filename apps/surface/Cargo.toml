@@ -19,6 +19,7 @@ smallvec = { version = "1.11" }
 tracing = { version = "0.1", features = ["async-await"] }
 tracing-subscriber = { version = "0.3" }
 muda = { version = "0.15" }
+iyes_perf_ui = { git = "https://github.com/IyesGames/iyes_perf_ui", version = "0.4.0-rc.1" }
 # crossterm = { version = "0.28" }
 # ratatui = { version = "0.28" }
 
@@ -53,5 +54,8 @@ path = "../../macros/chizel"
 # [dependencies.ethos]
 # path = "../../../ethos"
 
-[dependencies.atlas]
-path = "../../../atlas"
+# [dependencies.atlas]
+# path = "../../../atlas"
+
+[build-dependencies]
+anyhow = { version = "1.0" }

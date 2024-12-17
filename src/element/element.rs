@@ -1,4 +1,7 @@
+use core::any::Any;
+use core::any::TypeId;
 use core::fmt::Debug;
+use core::ops::Deref;
 
 use alloc::boxed::Box;
 use alloc::string::String;

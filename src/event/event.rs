@@ -8,8 +8,23 @@ pub trait Event {
 
 #[derive(Debug)]
 pub enum EventPin {
-    Click(EventHandlerFn<ClickEvent>)
+    Click(EventHandlerFn<ClickEvent>),
+    Hover(EventHandlerFn<HoverEvent>),
 }
+
+impl From<EventHandlerFn<ClickEvent>> for EventPin {
+    fn from(handler: EventHandlerFn<ClickEvent>) -> Self {
+        EventPin::Click(handler)
+    }
+}
+
+impl From<EventHandlerFn<HoverEvent>> for EventPin {
+    fn from(handler: EventHandlerFn<HoverEvent>) -> Self {
+        EventPin::Hover(handler)
+    }
+}
+
+pub type EventHandlerFn<E> = fn(event: &E);
 
 #[derive(Debug)]
 pub struct EventStack<'arena> {
@@ -19,7 +34,7 @@ pub struct EventStack<'arena> {
     
     /// TODO
     #[cfg(not(feature="bump"))]
-    events: Vec<Box<fn(&ClickEvent)>>,
+    events: Vec<Box<EventPin>>,
 }
 
 #[cfg(feature="bump")]
@@ -56,9 +71,8 @@ impl EventStack {
 pub enum EventKind {
     /// TODO
     Click,
+    Hover,
 }
-
-pub type EventHandlerFn<E> = fn(event: &E);
 
 // TODO: Remove this!
 // pub struct EventHandlerFn<F>
@@ -85,5 +99,16 @@ impl Event for ClickEvent {
     /// TODO
     fn kind(self) -> EventKind {
         EventKind::Click
+    }
+}
+
+/// TODO: Get this from slate::events::*.
+#[derive(Debug)]
+pub struct HoverEvent;
+
+impl Event for HoverEvent {
+    /// TODO
+    fn kind(self) -> EventKind {
+        EventKind::Hover
     }
 }

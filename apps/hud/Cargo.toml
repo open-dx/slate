@@ -29,8 +29,8 @@ serde = { version = "1.0", features = ["std", "derive"] }
 [dependencies.bevy]
 version = "0.15"
 
-[dependencies.atlas]
-path = "../../../atlas"
+# [dependencies.atlas]
+# path = "../../../atlas"
 
 [dependencies.slate]
 path = "../../"

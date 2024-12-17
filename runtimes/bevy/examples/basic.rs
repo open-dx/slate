@@ -14,7 +14,7 @@ use bevy::window::PrimaryWindow;
 
 use bevy_slate::config::BevySlateConfig;
 use bevy_slate::BevySlatePlugin;
-use bevy_slate::provider::WindowSurface;
+use bevy_slate::provider::NodeSurface;
 use bevy_slate::window::WindowKind;
 use bevy_slate::time::DrawTimer;
 use bevy_slate::time::DrawTimerFinishedEvent;
@@ -74,13 +74,13 @@ pub(crate) fn spawn_ui_surface(
     mut commands: Commands,
 ) {
     commands.spawn(Camera2d);
-    commands.spawn(WindowSurface::new());
+    commands.spawn(NodeSurface::new());
     commands.spawn(DrawTimer::new(Duration::from_secs(2)));
 }
 
 /// TODO
 fn draw_basic_surface(
-    mut surface_qry: Query<&mut WindowSurface>,
+    mut surface_qry: Query<&mut NodeSurface>,
     mut timer_finished_evtr: EventReader<DrawTimerFinishedEvent>,
     mut commands: Commands,
 ) {

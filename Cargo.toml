@@ -28,6 +28,10 @@ path = "examples/bones.rs"
 name = "slate-styles"
 path = "examples/styles.rs"
 
+[[example]]
+name = "slate-events"
+path = "examples/events.rs"
+
 [[bench]]
 name = "allocation"
 harness = false
@@ -73,6 +77,9 @@ path = "./macros/chizel"
 
 [dependencies.chalk]
 path = "./macros/chalk"
+
+[dependencies.oops]
+git = "https://github.com/open-dx/oops-rs"
 
 #--
 [dev-dependencies]

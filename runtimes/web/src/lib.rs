@@ -24,5 +24,10 @@ extern "C" {
 
 #[wasm_bindgen]
 pub fn greet() {
-    log("Hello from Slate!");
+    log("Hello from Slate lol!");
+}
+
+#[derive(oops::Error)]
+pub enum WebRuntimeError {
+    Unknown,
 }

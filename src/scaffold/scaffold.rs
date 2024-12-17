@@ -261,8 +261,8 @@ impl<'arena> Scaffold<'arena> {
     }
     
     /// TODO
-    pub fn with_event_attr(&mut self, event_pin: EventPin) -> Result<&mut Self, ScaffoldError> {
-        self.events.push(Box::new_in(event_pin, self.arena));
+    pub fn with_event_attr<H: Into<EventPin>>(&mut self, event_pin: H) -> Result<&mut Self, ScaffoldError> {
+        self.events.push(Box::new_in(event_pin.into(), self.arena));
         Ok(self) // etc..
     }
     

@@ -1,13 +1,16 @@
 use std::num::NonZeroU8;
 use std::process::ExitCode;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 
-use bevy::prelude::ChildBuild as _;
+use slate::event::ClickEvent;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 
 use context::ContextMenu;
 use context::ContextMenuEvent;
 
+use bevy::prelude::ChildBuild;
 use bevy::prelude::BuildChildren;
 use bevy::prelude::DespawnRecursiveExt;
 use bevy::prelude::Parent;
@@ -28,14 +31,13 @@ use bevy::tasks::AsyncComputeTaskPool;
 
 use bevy_slate::BevySlatePlugin;
 use bevy_slate::config::BevySlateConfig;
-use bevy_slate::provider::WindowSurface;
+use bevy_slate::provider::NodeSurface;
 use bevy_slate::reticle::ReticleShape;
 use bevy_slate::reticle::ReticlePosition;
 use bevy_slate::window::Window;
 use bevy_slate::window::WindowEvent;
 use bevy_slate::window::WindowLevel;
 
-use slate::event::EventPin;
 use slate::style::StyleSheet;
 use slate::component::x::layout::Div;
 use slate::component::x::layout::Section;
@@ -105,6 +107,12 @@ impl Surface {
     pub fn build(mut self) -> Result<Self, SurfaceError> {
         self.app.add_plugins(BevySlatePlugin::new(self.create_bevy_slate_config()));
         
+        self.app.add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin);
+        self.app.add_plugins(bevy::diagnostic::EntityCountDiagnosticsPlugin);
+        self.app.add_plugins(bevy::diagnostic::SystemInformationDiagnosticsPlugin);
+        
+        self.app.add_plugins(iyes_perf_ui::PerfUiPlugin);
+        
         self.app.insert_non_send_resource(ContextMenu::new());
         self.app.add_event::<ContextMenuEvent>();
         
@@ -120,7 +128,9 @@ impl Surface {
         self.app.add_systems(Startup, setup_artboards);
         
         self.app.add_systems(PostStartup, draw_toolbar);
+        // self.app.add_systems(PostStartup, setup_performance_ui);
         
+        self.app.add_systems(PreUpdate, setup_primary_window);
         self.app.add_systems(PreUpdate, route_keybinds);
         
         self.app.add_systems(Update, bevy_slate::window::route_window_events);
@@ -278,15 +288,21 @@ fn route_keybinds(
 fn setup_tools(
     mut commands: Commands,
 ) {
-    commands.spawn(WindowSurface::new());
+    commands.spawn(NodeSurface::new());
 }
 
 pub mod fa {
+    #[allow(unused)]
     pub mod icons {
         pub const BARS: &str = "\u{f0c9}";
         pub const GEAR: &str = "\u{f013}";
         pub const BUG: &str = "\u{f188}";
         pub const PLAY: &str = "\u{f04b}";
+        pub const BACK: &str = "\u{f104}";
+        pub const FORWARD: &str = "\u{f105}";
+        pub const MINUS: &str = "\u{f068}";
+        pub const PLUS: &str = "\u{2b}";
+        
     }
 }
 
@@ -303,7 +319,8 @@ pub const DANG_01: ConstStyleFn = |stylesheet: &mut StyleSheet| {
 
 /// TODO
 fn draw_toolbar(
-    mut surface_qry: Query<&mut WindowSurface>,
+    mut surface_qry: Query<&mut NodeSurface>,
+    selected_tab: Local<AtomicUsize>,
     mut commands: Commands,
 ) {
     let mut surface = surface_qry.single_mut();
@@ -314,8 +331,8 @@ fn draw_toolbar(
         (
             "Design",
             [
+                ("Penpot", "https://design.penpot.app"),
                 ("Excalidraw", "https://www.excalidraw.com"),
-                ("Figma", "https://www.figma.com"),
             ]
         ),
         (
@@ -327,7 +344,15 @@ fn draw_toolbar(
         ),
     ];
     
-    let selected_tab = 1;
+    let selected_tab_idx = {
+        selected_tab.store(1, Ordering::SeqCst);
+        selected_tab.load(Ordering::SeqCst)
+    };
+    
+    let report = |event: &ClickEvent| {
+        tracing::debug!("Event: {:?}", event);
+        // selected_tab.store(1, Ordering::SeqCst);
+    };
     
     surface.draw(&mut commands, chizel::uix! {
         .toolbar {
@@ -369,9 +394,8 @@ fn draw_toolbar(
         }
         
         .resource_viewer {
-            FlexDirection::Column,
+            FlexDirection::Row,
             FlexGrow::new(1.),
-            BackgroundColor::hex("#191B1FF8"),
             BoxSize::new(Auto, Percent(100.)),
         }
         
@@ -381,7 +405,7 @@ fn draw_toolbar(
             #[style(FlexDirection::Row)]
             #[style(AlignItems::Center)]
             #[style(Padding::new(10.))]
-            #[style(BackgroundColor::hex("#191B1FF8"))]
+            #[style(BackgroundColor::hex("#191B1FEE"))]
             <Sidebar>
                 #[class(toolbar)]
                 <Div>
@@ -415,7 +439,7 @@ fn draw_toolbar(
                             <TextBlock text=fa::icons::BUG />
                         </Button>
                         
-                        /// 
+                        /// TODO
                         #[class(toolbar_button)]
                         <Button value="TODO">
                             #[style(FontFamily::new("fa-solid-900"))]
@@ -430,40 +454,86 @@ fn draw_toolbar(
             /// WebView Number One!
             #[class(resource_viewer)]
             <Div>
+                #[style(FlexGrow::new(1.))]
+                #[style(FlexDirection::Column)]
+                <Div>
+                    /// Tab Toolbar
+                    #[style(FlexDirection::Row)]
+                    #[style(Gap::new(10.))]
+                    #[style(BackgroundColor::hex("#191B1FEE"))]
+                    #[style(Padding::xy(15., 10.))]
+                    <Div>
+                        /// Tab Name
+                        <Div>
+                            #[style(FontFamily::new("Montserrat-Medium"))]
+                            #[style(FontSize::new(12.))]
+                            #[style(ContentColor::hex("#AAAAAA"))]
+                            <TextBlock text="Designer" />
+                        </Div>
+                        
+                        /// Address Bar
+                        <Div>
+                            #[style(FontFamily::new("Montserrat-Medium"))]
+                            #[style(FontSize::new(12.))]
+                            #[style(ContentColor::hex("#888888"))]
+                            <TextBlock text="Some Tool" />
+                        </Div>
+                    </Div>
+                    
+                    /// WebView Number One!
+                    #[style(FlexGrow::new(1.))]
+                    <Div />
+                </Div>
+                
                 /// WebView Number One!
                 #[style(FlexGrow::new(1.))]
+                #[style(BackgroundColor::hex("#191B1FEE"))]
                 #[style(FlexDirection::Column)]
                 <Div>
                     /// WebView Number One!
                     #[style(FlexDirection::Row)]
+                    #[style(Gap::new(Px(2.)))]
                     #[style(Padding::all(5., 5., 0., 5.))]
                     <Div>
                         /// This is the first tab!
                         #[when(dogs.len() > 0)]
                         #[each(dog in dogs.iter())]
+                        #[style(BackgroundColor::hex("#FFFFFF04"))]
                         #[style(Padding::xy(10., 5.))]
+                        #[style(BorderRadius::new(Percent(50.)))]
+                        #[on(Click(report))]
                         <Div>
                             #[style(FontFamily::new("Montserrat-Regular"))]
-                            #[style(FontSize::new(14.))]
+                            #[style(FontSize::new(12.))]
                             #[style(ContentColor::hex("#AAAAAA"))]
-                            #[on(EventPin::Click(|ev| {
-                                tracing::debug!("Clicked!: {:#?}", ev)
-                            }))]
                             <TextBlock text={TABS[0].0} />
                         </Div>
                         
                         /// This is the second tab!
-                        #[style(Padding::xy(10., 5.))]
                         #[style(BackgroundColor::hex("#FFFFFF08"))]
+                        #[style(Padding::xy(10., 5.))]
                         #[style(BorderRadius::new(Percent(50.)))]
+                        #[on(Click(report))]
                         <Div>
                             #[style(FontFamily::new("Montserrat-Medium"))]
-                            #[style(FontSize::new(14.))]
+                            #[style(FontSize::new(12.))]
                             #[style(ContentColor::hex("#DDDDDD"))]
                             <TextBlock text={TABS[1].0} />
                         </Div>
+                                
+                        #[style(BackgroundColor::hex("#FFFFFF04"))]
+                        #[style(Padding::xy(10., 5.))]
+                        #[style(BorderRadius::new(Percent(50.)))]
+                        #[on(Click(report))]
+                        <Div>
+                            /// Tab Name
+                            #[style(FontFamily::new("Montserrat-Medium"))]
+                            #[style(FontSize::new(12.))]
+                            #[style(ContentColor::hex("#AAAAAA"))]
+                            <TextBlock text=fa::icons::PLUS />
+                        </Div>
                     </Div>
-                    
+                        
                     #[style(FlexGrow::new(1.))]
                     #[style(FlexDirection::Row)]
                     <Div>
@@ -475,26 +545,52 @@ fn draw_toolbar(
                             #[style(Gap::new(10.))]
                             #[style(Padding::xy(15., 10.))]
                             <Div>
-                                /// Tab Name
+                                #[style(FlexDirection::Row)]
+                                #[style(Gap::new(5.))]
                                 <Div>
-                                    #[style(FontFamily::new("Montserrat-Medium"))]
-                                    #[style(FontSize::new(14.))]
-                                    #[style(ContentColor::hex("#AAAAAA"))]
-                                    <TextBlock text={TABS[selected_tab].1[0].0} />
+                                    #[style(FontFamily::new("fa-solid-900"))]
+                                    #[style(FontSize::new(12.))]
+                                    #[style(ContentColor::hex("#444444"))]
+                                    #[on(Click(report))]
+                                    <TextBlock text=fa::icons::BACK />
+                                    
+                                    #[style(FontFamily::new("fa-solid-900"))]
+                                    #[style(FontSize::new(12.))]
+                                    #[style(ContentColor::hex("#444444"))]
+                                    #[on(Click(report))]
+                                    <TextBlock text=fa::icons::FORWARD />
                                 </Div>
                                 
-                                /// Address Bar
+                                #[style(FlexDirection::Row)]
+                                #[style(Gap::new(5.))]
                                 <Div>
+                                    #[style(FontFamily::new("fa-solid-900"))]
+                                    #[style(FontSize::new(12.))]
+                                    #[style(ContentColor::hex("#444444"))]
+                                    #[on(Click(report))]
+                                    <TextBlock text=fa::icons::BUG />
+                                </Div>
+                                
+                                <Div>
+                                    /// Tab Name
                                     #[style(FontFamily::new("Montserrat-Medium"))]
-                                    #[style(FontSize::new(14.))]
+                                    #[style(FontSize::new(12.))]
+                                    #[style(ContentColor::hex("#AAAAAA"))]
+                                    <TextBlock text={TABS[selected_tab_idx].1[0].0} />
+                                </Div>
+                                
+                                <Div>
+                                    /// Address Bar
+                                    #[style(FontFamily::new("Montserrat-Medium"))]
+                                    #[style(FontSize::new(12.))]
                                     #[style(ContentColor::hex("#888888"))]
-                                    <TextBlock text={TABS[selected_tab].1[0].1} />
+                                    <TextBlock text={TABS[selected_tab_idx].1[0].1} />
                                 </Div>
                             </Div>
                             
                             /// WebView Number One!
                             #[style(FlexGrow::new(1.))]
-                            <WebView address={TABS[selected_tab].1[0].1} />
+                            <WebView address={TABS[selected_tab_idx].1[0].1} />
                         </Div>
                         
                         #[style(FlexGrow::new(1.))]
@@ -505,32 +601,72 @@ fn draw_toolbar(
                             #[style(Gap::new(10.))]
                             #[style(Padding::xy(15., 10.))]
                             <Div>
-                                /// Tab Name
+                                #[style(FlexDirection::Row)]
+                                #[style(Gap::new(5.))]
                                 <Div>
-                                    #[style(FontFamily::new("Montserrat-Medium"))]
-                                    #[style(FontSize::new(14.))]
-                                    #[style(ContentColor::hex("#AAAAAA"))]
-                                    <TextBlock text={TABS[selected_tab].1[1].0} />
+                                    #[style(FontFamily::new("fa-solid-900"))]
+                                    #[style(FontSize::new(12.))]
+                                    #[style(ContentColor::hex("#444444"))]
+                                    #[on(Click(report))]
+                                    <TextBlock text=fa::icons::BACK />
+                                    
+                                    #[style(FontFamily::new("fa-solid-900"))]
+                                    #[style(FontSize::new(12.))]
+                                    #[style(ContentColor::hex("#444444"))]
+                                    #[on(Click(report))]
+                                    <TextBlock text=fa::icons::FORWARD />
                                 </Div>
                                 
-                                /// Address Bar
+                                #[style(FlexDirection::Row)]
+                                #[style(Gap::new(5.))]
                                 <Div>
+                                    #[style(FontFamily::new("fa-solid-900"))]
+                                    #[style(FontSize::new(12.))]
+                                    #[style(ContentColor::hex("#444444"))]
+                                    #[on(Click(report))]
+                                    <TextBlock text=fa::icons::BUG />
+                                </Div>
+                                
+                                <Div>
+                                    /// Tab Name
                                     #[style(FontFamily::new("Montserrat-Medium"))]
-                                    #[style(FontSize::new(14.))]
+                                    #[style(FontSize::new(12.))]
+                                    #[style(ContentColor::hex("#AAAAAA"))]
+                                    <TextBlock text={TABS[selected_tab_idx].1[1].0} />
+                                </Div>
+                                
+                                <Div>
+                                    /// Address Bar
+                                    #[style(FontFamily::new("Montserrat-Medium"))]
+                                    #[style(FontSize::new(12.))]
                                     #[style(ContentColor::hex("#888888"))]
-                                    <TextBlock text={TABS[selected_tab].1[1].1} />
+                                    <TextBlock text={TABS[selected_tab_idx].1[1].1} />
                                 </Div>
                             </Div>
                             
-                            /// WebView Number One!
+                            /// WebView Number Two!
                             #[style(FlexGrow::new(1.))]
-                            <WebView address={TABS[selected_tab].1[1].1} />
+                            <WebView address={TABS[selected_tab_idx].1[1].1} />
                         </Div>
                     </Div>
                 </Div>
             </Div>
         </Div>
     });
+}
+
+//---
+// fn setup_performance_ui(
+//     mut commands: Commands,
+// ) {
+//     commands.spawn(iyes_perf_ui::prelude::PerfUiAllEntries::default());
+// }
+
+//---
+fn setup_primary_window(
+    // mut window: Single<&mut bevy::window::Window, Added<bevy::window::PrimaryWindow>>,
+) {
+    // window.set_maximized(true);
 }
 
 /// TODO
@@ -576,6 +712,7 @@ impl SelectionMarquee {
 pub struct SelectionBoundaryBundle {
     /// TODO
     pub node: Node,
+    pub z_index: ZIndex,
 }
 
 impl SelectionBoundaryBundle {
@@ -590,6 +727,7 @@ impl SelectionBoundaryBundle {
                 bottom: Val::Px(0.0),
                 ..Default::default()
             },
+            z_index: ZIndex(-1),
         }
     }
 }

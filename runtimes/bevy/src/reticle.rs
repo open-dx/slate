@@ -42,91 +42,88 @@ impl Default for ReticlePlugin {
 impl Plugin for ReticlePlugin {
     /// TODO
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, Self::setup);
-        app.add_systems(PreUpdate, Self::display);
-        app.add_systems(Update, Self::position);
-        app.add_systems(Update, Self::cursor);
+        app.add_systems(Startup, setup_reticles);
+        app.add_systems(PreUpdate, sync_reticle_display);
+        app.add_systems(Update, sync_reticle_position);
+        app.add_systems(Update, sync_reticle_cursor);
     }
 }
 
-impl ReticlePlugin {
-    /// TODO
-    fn setup(
-        mut commands: Commands,
-    ) {
-        commands.spawn(ReticleBundle::new(
-            ReticleShape::Circle,
-            ReticleStyle::new(Color::WHITE, 30., Some(CursorIcon::default())),
-            ReticlePosition::new(Vec2::ZERO, Vec3::ZERO),
-        ));
-    }
-    
-    /// TODO
-    fn display(
-        windows: Query<&Window, With<PrimaryWindow>>,
-        reticles: Query<(&ReticleShape, &ReticleStyle, &Transform), With<ReticleShape>>,
-        mut gizmos: Gizmos,
-    ) {
-        if let Ok(window) = windows.get_single() {
-            if window.cursor_position() != None {
-                for (shape, style, transform) in reticles.iter() {
-                    let position = transform.translation.truncate();
-                    
-                    match shape {
-                        ReticleShape::Circle => {
-                            gizmos.circle_2d(position, style.size, style.color);
-                        }
-                        ReticleShape::Square => {
-                            gizmos.rect_2d(position, Vec2::ONE * style.size, style.color);
-                        }
-                        ReticleShape::Triangle => {
-                            gizmos.circle_2d(position, style.size, style.color).resolution(3);
-                        }
+/// TODO: Move this to examples/apps.
+fn setup_reticles(
+    mut commands: Commands,
+) {
+    commands.spawn(ReticleBundle::new(
+        ReticleShape::Circle,
+        ReticleStyle::new(Color::WHITE, 30., Some(CursorIcon::default())),
+        ReticlePosition::new(Vec2::ZERO, Vec3::ZERO),
+    ));
+}
+
+/// TODO
+fn sync_reticle_display(
+    windows: Query<&Window, With<PrimaryWindow>>,
+    reticles: Query<(&ReticleShape, &ReticleStyle, &Transform), With<ReticleShape>>,
+    mut gizmos: Gizmos,
+) {
+    if let Ok(window) = windows.get_single() {
+        if window.cursor_position() != None {
+            for (shape, style, transform) in reticles.iter() {
+                let position = transform.translation.truncate();
+                
+                match shape {
+                    ReticleShape::Circle => {
+                        gizmos.circle_2d(position, style.size, style.color);
+                    }
+                    ReticleShape::Square => {
+                        gizmos.rect_2d(position, Vec2::ONE * style.size, style.color);
+                    }
+                    ReticleShape::Triangle => {
+                        gizmos.circle_2d(position, style.size, style.color).resolution(3);
                     }
                 }
             }
         }
     }
-    
-    /// TODO
-    fn position(
-        windows: Query<&Window, With<PrimaryWindow>>,
-        cameras: Query<&Transform, (With<Camera2d>, Without<ReticlePosition>)>,
-        mut reticles: Query<(&mut ReticlePosition, &mut Transform), With<ReticlePosition>>,
-    ) {
-        if let Ok(window) = windows.get_single() {
-            if let Some(cursor_pos) = window.cursor_position() {
-                let size = Vec2::new(window.width() as f32, window.height() as f32);
-                let screen_pos = cursor_pos;
-                let cursor_pos = cursor_pos - size / 2.0;
-    
-                if let Some(camera_transform) = cameras.iter().next() {
-                    let inverse_camera_matrix = camera_transform.compute_matrix().inverse();
-                    let space_2d_pos = inverse_camera_matrix.transform_point3(Vec3::new(cursor_pos.x, -cursor_pos.y, 0.0));
-    
-                    for (mut position, mut transform) in reticles.iter_mut() {
-                        position.screen = screen_pos;
-                        position.space_2d = space_2d_pos;
-                        transform.translation = space_2d_pos;
-                    }
+}
+
+/// TODO
+fn sync_reticle_position(
+    windows: Query<&Window, With<PrimaryWindow>>,
+    cameras: Query<&Transform, (With<Camera2d>, Without<ReticlePosition>)>,
+    mut reticles: Query<(&mut ReticlePosition, &mut Transform), With<ReticlePosition>>,
+) {
+    if let Ok(window) = windows.get_single() {
+        if let Some(cursor_pos) = window.cursor_position() {
+            let size = Vec2::new(window.width() as f32, window.height() as f32);
+            let screen_pos = cursor_pos;
+            let cursor_pos = cursor_pos - size / 2.0;
+
+            if let Some(camera_transform) = cameras.iter().next() {
+                let inverse_camera_matrix = camera_transform.compute_matrix().inverse();
+                let space_2d_pos = inverse_camera_matrix.transform_point3(Vec3::new(cursor_pos.x, -cursor_pos.y, 0.0));
+
+                for (mut position, mut transform) in reticles.iter_mut() {
+                    position.screen = screen_pos;
+                    position.space_2d = space_2d_pos;
+                    transform.translation = space_2d_pos;
                 }
-            }
-        }
-    }
-    
-    /// Sync the currently selected cursor to the appropriate windows.
-    fn cursor(
-        mut windows: Query<&mut Window, With<PrimaryWindow>>,
-        reticles: Query<&ReticleStyle, (With<ReticleShape>, Changed<ReticleStyle>)>,
-    ) {
-        for style in reticles.iter() {
-            if let Ok(mut window) = windows.get_single_mut() {
-                // window.cursor.icon = style.cursor.unwrap_or(CursorIcon::Default);
             }
         }
     }
 }
 
+/// Sync the currently selected cursor to the appropriate windows.
+fn sync_reticle_cursor(
+    mut windows: Query<&mut Window, With<PrimaryWindow>>,
+    reticles: Query<&ReticleStyle, (With<ReticleShape>, Changed<ReticleStyle>)>,
+) {
+    for style in reticles.iter() {
+        if let Ok(mut window) = windows.get_single_mut() {
+            // window.cursor.icon = style.cursor.unwrap_or(CursorIcon::Default);
+        }
+    }
+}
 
 /// TODO
 #[derive(Bundle, Default)]

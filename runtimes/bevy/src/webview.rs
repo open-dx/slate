@@ -217,7 +217,19 @@ pub fn spawn_webview_controllers(
             if let Err(error) = webview_provider.env_builder.build(move |env| {
                 env?.create_controller(raw_window_handle, move |controller| {
                     let controller = controller?;
+                    let controller2 = controller.get_controller2()?;
                     let webview = controller.get_webview()?;
+                    
+                    webview.add_contains_full_screen_element_changed(|event| {
+                        Ok(())
+                    });
+                    
+                    controller2.put_default_background_color(webview2_sys::Color {
+                        a: 0,
+                        r: 0,
+                        g: 0,
+                        b: 0,
+                    });
                     
                     let settings = webview.get_settings()?;
                     
@@ -225,6 +237,7 @@ pub fn spawn_webview_controllers(
                     settings.put_are_default_context_menus_enabled(true)?;
                     settings.put_is_status_bar_enabled(false)?;
                     settings.put_is_zoom_control_enabled(false)?;
+                    settings.put_is_zoom_control_enabled(true)?;
                     
                     let bounds = unsafe {
                         let mut rect = core::mem::zeroed();
@@ -261,8 +274,8 @@ pub fn spawn_webview_controllers(
 pub fn sync_window_resize(
     windows: Query<(Entity, &Window), With<PrimaryWindow>>,
     winit_windows: NonSend<WinitWindows>,
-    mut webview_provider: NonSendMut<WebViewProvider>,
     mut webviews: Query<(Entity, &GlobalTransform, &Node, &ComputedNode, &mut WebViewDisplay)>,
+    mut webview_provider: NonSendMut<WebViewProvider>,
     mut resize_evt: EventReader<WindowResized>,
     mut commands: Commands,
 ) {

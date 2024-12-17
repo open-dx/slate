@@ -1,17 +1,20 @@
 [package]
 name = "web-slate"
 version = "0.1.0"
-
 authors = ["Lorren Biffin <lorren.biffin@gmail.com>"]
 description = "Render Slate UI on the web."
 repository = "NONE"
 license = "MIT"
-
 edition = "2021"
-build = "build/main.rs"
+build = "scripts/build.rs"
 
 [features]
-default = ["console_error_panic_hook"]
+default = ["recover"]
+dev = []
+debug = []
+verbose = []
+inspect = []
+recover = ["console_error_panic_hook"]
 
 #--
 [lib]
@@ -23,18 +26,29 @@ path = "examples/basic.rs"
 
 #--
 [dependencies]
-wasm-bindgen = "0.2.88"
-
+wasm-bindgen = { version = "0.2.88" }
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
 # all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
 # code size when deploying.
 console_error_panic_hook = { version = "0.1.7", optional = true }
 
+tracing = { version = "0.1.41", default-features = false, features = ["attributes", "tracing-attributes"] }
+tracing-subscriber = { version = "0.3.19", default-features = false, features = ["alloc", "ansi", "fmt", "registry", "sharded-slab", "smallvec", "thread_local", "tracing-log"] }
+
+[dependencies.oops]
+git = "https://github.com/open-dx/oops-rs"
+
 [dev-dependencies]
-anyhow = { version = "1.0.75" }
-wasm-bindgen-test = "0.3.34"
-tokio = { version = "1.33.0", features = ["full"] }
-axum = { version = "*", features = ["macros", "ws", "tracing", "headers", "multipart"] }
-tower = { version = "0.4.13", features = ["full"] }
-tower-http = { version = "0.5.0", features = ["fs", "trace"] }
+anyhow = { version = "1.0" }
+wasm-bindgen-test = { version = "0.3" }
+tokio = { version = "1.33", features = ["full"] }
+axum = { version = "0.7", features = ["macros", "ws", "tracing", "multipart"] }
+tower = { version = "0.4", features = ["full"] }
+tower-http = { version = "0.5", features = ["fs", "trace"] }
+
+[dev-dependencies.web-slate-server]
+path = "./server"
+
+[dev-dependencies.slate]
+path = "../../"

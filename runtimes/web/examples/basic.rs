@@ -2,24 +2,29 @@ use std::process::ExitCode;
 
 use anyhow::Result;
 
-// use axum::Router;
+use tokio::net::TcpListener;
 
-// use tower_http::services::ServeDir;
+use tower_http::services::ServeDir;
+
+use axum::Router;
 
 //---
 #[tokio::main]
 async fn main() -> Result<ExitCode> {
-    // let app = {
-    //     Router::new()
-    //         // .route("/", get(|| async { "Hello, World!" }))
-    //         // .nest("/asdf", ServeDir::new("./asdf"))
-    //         .nest_service("/pkg", ServeDir::new("./pkg"))
-    //         .nest_service("/", ServeDir::new("./public"))
-    // };
+    slate::log::init("trace");
     
-    // axum::Server::bind(&"0.0.0.0:3000".parse()?)
-    //     .serve(app.into_make_service())
-    //     .await?;
+    web_slate_server::dev::build_wasm_pkg("./runtimes/web", "./dist/public/pkg")?;
+    
+    let public_dir = ServeDir::new("./runtimes/web/dist/public")
+        .append_index_html_on_directories(true);
+    
+    let app = Router::new()
+        .fallback_service(axum::routing::get_service(public_dir));
+    
+    let addr = ("localhost", 9999);
+    
+    tracing::info!("Server running at http://{}:{} ..", addr.0, addr.1);
+    axum::serve(TcpListener::bind(addr).await?, app).await?;
     
     Ok(ExitCode::SUCCESS)
 }
